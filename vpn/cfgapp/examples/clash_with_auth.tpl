@@ -17,12 +17,7 @@ dns:
     - https://cloudflare-dns.com/dns-query
 
 proxies:
-  - name: "Proxy Server"
-    type: http
-    server: proxy.example.com
-    port: 8080
-    username: user
-    password: pass
+  - PROXY_CONFIGS
 
 proxy-groups:
   - name: PROXY
@@ -31,7 +26,7 @@ proxy-groups:
     interval: 600
     tolerance: 100
     proxies:
-      - Proxy Server
+      - PROXY_LIST
 
 rules:
   # check vpn connected
