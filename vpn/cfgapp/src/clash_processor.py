@@ -66,7 +66,7 @@ class ClashProcessor:
         return rule_sets
 
     async def expand_rule_sets(self, rule_sets: list[dict[str, Any]],
-                              incoming_host: str, request_headers: dict) -> list[str]:
+                              incoming_host: str, request_headers: dict) -> list[list[str]]:
         """Expand RULE-SET entries using the template processor.
 
         Args:
@@ -75,9 +75,9 @@ class ClashProcessor:
             request_headers: Request headers
 
         Returns:
-            List of expanded rules
+            List of expanded rules for each RULE-SET (list of lists)
         """
-        expanded_rules = []
+        expanded_rules_list = []
 
         for rule_set in rule_sets:
             url = rule_set['url']
@@ -94,11 +94,11 @@ class ClashProcessor:
             # Add expanded rules (skip the first line which is the comment)
             lines = expanded.split('\n')
             if lines and lines[0].startswith('# RULE-SET'):
-                expanded_rules.extend(lines[1:])
+                expanded_rules_list.append(lines[1:])
             else:
-                expanded_rules.extend(lines)
+                expanded_rules_list.append(lines)
 
-        return expanded_rules
+        return expanded_rules_list
 
     def replace_proxy_placeholders(self, clash_config: dict[str, Any], 
                                  request_headers: dict) -> dict[str, Any]:
@@ -180,20 +180,21 @@ class ClashProcessor:
             return yaml.dump(clash_config, default_flow_style=False, allow_unicode=True)
 
         # Expand RULE-SET entries
-        expanded_rules = await self.expand_rule_sets(rule_sets, incoming_host, request_headers)
+        expanded_rules_list = await self.expand_rule_sets(rule_sets, incoming_host, request_headers)
 
-        # Replace RULE-SET entries with expanded rules
+        # Replace RULE-SET entries with expanded rules in order
         rules = clash_config.get('rules', [])
         new_rules = []
+        rule_set_index = 0
 
         for rule in rules:
             if isinstance(rule, str) and rule.startswith('RULE-SET,'):
-                # Skip RULE-SET entries as they will be replaced
-                continue
-            new_rules.append(rule)
-
-        # Add expanded rules
-        new_rules.extend(expanded_rules)
+                # Replace RULE-SET entry with its expanded rules
+                if rule_set_index < len(expanded_rules_list):
+                    new_rules.extend(expanded_rules_list[rule_set_index])
+                    rule_set_index += 1
+            else:
+                new_rules.append(rule)
 
         # Update configuration
         clash_config['rules'] = new_rules

@@ -126,6 +126,31 @@ proxy-groups:
       - PROXY_LIST
 ```
 
+### RULE-SET Expansion
+
+RULE-SET entries are expanded in the order they appear in the template, preserving the original rule order:
+
+```yaml
+rules:
+  - DOMAIN-SUFFIX,example.com,PROXY
+  - RULE-SET,https://s.dimonb.com/lists/google.list,PROXY
+  - DOMAIN-SUFFIX,test.com,PROXY
+  - RULE-SET,https://s.dimonb.com/lists/youtube.list,PROXY
+  - MATCH,DIRECT
+```
+
+After expansion, the rules maintain their relative order:
+```yaml
+rules:
+  - DOMAIN-SUFFIX,example.com,PROXY
+  - DOMAIN-SUFFIX,google.com,PROXY
+  - DOMAIN-SUFFIX,googleapis.com,PROXY
+  - DOMAIN-SUFFIX,test.com,PROXY
+  - DOMAIN-SUFFIX,youtube.com,PROXY
+  - DOMAIN-SUFFIX,ytimg.com,PROXY
+  - MATCH,DIRECT
+```
+
 ### Example Clash Template
 
 ```yaml
