@@ -28,7 +28,6 @@ async def startup_event():
     """Initialize application on startup."""
     logger.info("CFG App starting up...")
     logger.info(f"API Host: {settings.api_host}")
-    logger.info(f"Alt Host: {settings.alt_host}")
     logger.info(f"IPv4 Block Prefix: /{settings.ipv4_block_prefix}")
     logger.info(f"IPv6 Block Prefix: /{settings.ipv6_block_prefix}")
 
@@ -87,7 +86,7 @@ async def proxy_handler(request: Request, path: str):
                 )
         except Exception as e:
             logger.error(f"Forward request failed: {e}")
-            raise HTTPException(status_code=500, detail="Forward request failed")
+            raise HTTPException(status_code=500, detail="Forward request failed") from e
 
         # If we get here, origin returned 404, try template
         tpl_path = url.path + ".tpl" + ('?' + url.query if url.query else '')

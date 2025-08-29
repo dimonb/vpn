@@ -9,8 +9,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # API configuration
-    api_host: str = Field(default="shadowrocket.ebac.dev", env="API_HOST")
-    alt_host: str = Field(default="s.dimonb.com", env="ALT_HOST")
+    api_host: str = Field(env="API_HOST")
 
     # IP aggregation settings
     ipv4_block_prefix: int = Field(default=18, env="IPV4_BLOCK_PREFIX")
