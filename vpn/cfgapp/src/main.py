@@ -1,6 +1,7 @@
 """Main FastAPI application for CFG proxy processing."""
 
 import logging
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
@@ -18,26 +19,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="CFG App",
-    description="Python application for proxy rule processing and NETSET expansion",
-    version="0.1.0"
-)
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown."""
+    # Startup
     logger.info("CFG App starting up...")
     logger.info(f"Config Host: {settings.config_host}")
     logger.info(f"IPv4 Block Prefix: /{settings.ipv4_block_prefix}")
     logger.info(f"IPv6 Block Prefix: /{settings.ipv6_block_prefix}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
+    
+    yield
+    
+    # Shutdown
     logger.info("CFG App shutting down...")
+
+
+app = FastAPI(
+    title="CFG App",
+    description="Python application for proxy rule processing and NETSET expansion",
+    version="0.1.0",
+    lifespan=lifespan
+)
 
 
 async def forward_request(request: Request, path_with_search: str) -> httpx.Response:
@@ -152,6 +155,9 @@ async def proxy_handler(request: Request, path: str):
                 headers={"content-type": "text/plain; charset=utf-8"}
             )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 401 Authentication required)
+        raise
     except Exception as e:
         logger.error(f"Worker error: {str(e)}")
         return Response(
