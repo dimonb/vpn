@@ -14,5 +14,24 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./caddy:/data/
+  cfgapp:
+    build:
+      context: ./cfgapp
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8003:8000"
+    environment:
+      - API_HOST=shadowrocket.ebac.dev
+      - ALT_HOST=s.dimonb.com
+      - IPV4_BLOCK_PREFIX=18
+      - IPV6_BLOCK_PREFIX=32
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./cfgapp:/app
+    depends_on:
+      - proxy
 
 

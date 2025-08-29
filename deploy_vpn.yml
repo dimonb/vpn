@@ -3,7 +3,7 @@
   hosts: vpn
   become: true
   vars:
-    config_directory: /root/vpn
+    config_directory: vpn
 
   tasks:
     - name: Ensure the configuration directory exists

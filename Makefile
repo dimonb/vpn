@@ -14,6 +14,9 @@ HTTP_PORT ?= "80"
 HTTPS_PORT ?= "443"
 HYSTERIA2_PORT ?= "47012"
 
+
+.PHONY: install-docker check-env deploy deploy-test cn passwords
+
 install-docker:
 	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 install_docker.yml
 
