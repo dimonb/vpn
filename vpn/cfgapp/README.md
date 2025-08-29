@@ -205,53 +205,17 @@ GET /clash.tpl?sub=premium
 GET /clash.tpl?sub=premium&u=dimonb&hash=abc123...
 ```
 
+### With Custom Password
+```
+GET /clash.tpl?hash=30dfb07872c73a324ec6692a00872e5cd1f4d99ee2c4a0a9d210ea7b8a1d48e6
+```
+
+### Combined Parameters
+```
+GET /clash.tpl?sub=premium&hash=30dfb07872c73a324ec6692a00872e5cd1f4d99ee2c4a0a9d210ea7b8a1d48e6
+```
+
 ## Installation
 
 1. Install dependencies:
-```bash
-poetry install
 ```
-
-2. Set up environment variables:
-```bash
-cp env.example .env
-# Edit .env with your configuration
-```
-
-3. Run the application:
-```bash
-poetry run python -m src.main
-```
-
-## Development
-
-### Running Tests
-
-```bash
-poetry run pytest tests/ -v
-```
-
-### Code Quality
-
-```bash
-poetry run ruff check src/ tests/
-poetry run ruff format src/ tests/
-```
-
-## API Endpoints
-
-- `GET /health` - Health check endpoint
-- `GET /{path:path}` - Main proxy handler for all other requests
-
-## Template Tags
-
-- `#CLASH` - Process as Clash YAML configuration
-- `#AUTH` - Require authentication for the template
-- `#SHADOWROCKET` - Process as Shadowrocket configuration
-
-## License
-
-MIT License
-
-
-
