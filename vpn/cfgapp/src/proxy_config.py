@@ -79,11 +79,12 @@ class ProxyConfig:
         
         return subs.get(sub_name, {})
 
-    def generate_proxy_configs(self, sub_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    def generate_proxy_configs(self, sub_name: Optional[str] = None, password: Optional[str] = None) -> List[Dict[str, Any]]:
         """Generate proxy configurations for all protocols in subscription.
 
         Args:
             sub_name: Subscription name, defaults to 'default'
+            password: Password from query parameter (optional)
 
         Returns:
             List of proxy configurations (one per proxy in subscription)
@@ -101,7 +102,7 @@ class ProxyConfig:
 
             # Generate one config per proxy (not per user)
             proxy_config = self._generate_proxy_config(
-                protocol, host, proxy_name
+                protocol, host, proxy_name, password
             )
             if proxy_config:
                 proxy_configs.append(proxy_config)
@@ -110,19 +111,20 @@ class ProxyConfig:
         return proxy_configs
 
     def _generate_proxy_config(self, protocol: str, host: str, 
-                              proxy_name: str) -> Dict[str, Any]:
+                              proxy_name: str, password: Optional[str] = None) -> Dict[str, Any]:
         """Generate proxy configuration for specific protocol.
 
         Args:
             protocol: Proxy protocol (e.g., 'hy2', 'vmess', etc.)
             host: Proxy host
             proxy_name: Proxy name
+            password: Password from query parameter (optional)
 
         Returns:
             Proxy configuration dictionary
         """
         if protocol == 'hy2':
-            return self._generate_hysteria2_config(host, proxy_name)
+            return self._generate_hysteria2_config(host, proxy_name, password)
         elif protocol == 'vmess':
             return self._generate_vmess_config(host, proxy_name)
         elif protocol == 'vless':
@@ -131,12 +133,13 @@ class ProxyConfig:
             logger.warning(f"Unsupported protocol: {protocol}")
             return {}
 
-    def _generate_hysteria2_config(self, host: str, proxy_name: str) -> Dict[str, Any]:
+    def _generate_hysteria2_config(self, host: str, proxy_name: str, password: Optional[str] = None) -> Dict[str, Any]:
         """Generate Hysteria2 proxy configuration.
 
         Args:
             host: Proxy host
             proxy_name: Proxy name
+            password: Password from query parameter (optional)
 
         Returns:
             Hysteria2 configuration dictionary
@@ -144,8 +147,12 @@ class ProxyConfig:
         # Generate unique name
         name = f"{proxy_name.lower()}"
         
-        # Generate random password and other parameters
-        password = self._generate_password(proxy_name)
+        # Use provided password or generate one
+        if password:
+            proxy_password = password
+        else:
+            proxy_password = self._generate_password(proxy_name)
+            
         port = settings.hysteria2_port  # Use fixed port from environment variable
         
         return {
@@ -153,7 +160,7 @@ class ProxyConfig:
             "type": "hysteria2",
             "server": host,
             "port": port,
-            "password": password,
+            "password": proxy_password,
             "sni": "i.am.com",
             "skip-cert-verify": True,
             "alpn": ["h3"],
@@ -267,14 +274,15 @@ class ProxyConfig:
         # Convert to UUID format
         return str(uuid.UUID(hash_val))
 
-    def get_proxy_list(self, sub_name: Optional[str] = None) -> List[str]:
+    def get_proxy_list(self, sub_name: Optional[str] = None, password: Optional[str] = None) -> List[str]:
         """Get list of proxy names for PROXY_LIST.
 
         Args:
             sub_name: Subscription name, defaults to 'default'
+            password: Password from query parameter (optional)
 
         Returns:
             List of proxy names
         """
-        proxy_configs = self.generate_proxy_configs(sub_name)
+        proxy_configs = self.generate_proxy_configs(sub_name, password)
         return [config['name'] for config in proxy_configs]

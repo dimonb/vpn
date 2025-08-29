@@ -116,22 +116,26 @@ class ClashProcessor:
             return clash_config
 
         try:
-            # Extract sub parameter from headers (if available)
+            # Extract sub parameter and hash from headers (if available)
             sub_name = None
+            password = None
             if 'x-query-string' in request_headers:
-                # Parse query string to find 'sub' parameter
+                # Parse query string to find 'sub' and 'hash' parameters
                 import urllib.parse
                 query_string = request_headers['x-query-string']
                 query_params = urllib.parse.parse_qs(query_string)
                 if 'sub' in query_params:
                     sub_name = query_params['sub'][0]
                     logger.info(f"Using subscription: {sub_name}")
+                if 'hash' in query_params:
+                    password = query_params['hash'][0]
+                    logger.info(f"Using password from hash parameter")
 
             # Replace PROXY_CONFIGS in proxies section
             if 'proxies' in clash_config:
                 proxies = clash_config['proxies']
                 if isinstance(proxies, list) and len(proxies) == 1 and proxies[0] == 'PROXY_CONFIGS':
-                    proxy_configs = self.proxy_config.generate_proxy_configs(sub_name)
+                    proxy_configs = self.proxy_config.generate_proxy_configs(sub_name, password)
                     clash_config['proxies'] = proxy_configs
                     logger.info(f"Replaced PROXY_CONFIGS with {len(proxy_configs)} proxy configurations")
 
@@ -141,7 +145,7 @@ class ClashProcessor:
                     if isinstance(group, dict) and 'proxies' in group:
                         proxies = group['proxies']
                         if isinstance(proxies, list) and len(proxies) == 1 and proxies[0] == 'PROXY_LIST':
-                            proxy_list = self.proxy_config.get_proxy_list(sub_name)
+                            proxy_list = self.proxy_config.get_proxy_list(sub_name, password)
                             group['proxies'] = proxy_list
                             logger.info(f"Replaced PROXY_LIST with {len(proxy_list)} proxy names")
 

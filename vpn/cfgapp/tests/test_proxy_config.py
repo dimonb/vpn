@@ -127,8 +127,31 @@ class TestProxyConfig:
             assert "sg_1_linode" in config["name"]
 
     @patch('src.proxy_config.settings')
-    def test_generate_hysteria2_config(self, mock_settings, config_file: Path) -> None:
-        """Test Hysteria2 configuration generation."""
+    def test_generate_hysteria2_config_with_password(self, mock_settings, config_file: Path) -> None:
+        """Test Hysteria2 configuration generation with provided password."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_port = 47012
+        proxy_config = ProxyConfig(str(config_file))
+        config = proxy_config._generate_hysteria2_config(
+            "test.host.com", "TEST_PROXY", "custom-password-123"
+        )
+        
+        assert config["type"] == "hysteria2"
+        assert config["server"] == "test.host.com"
+        assert config["name"] == "test_proxy"
+        assert config["password"] == "custom-password-123"  # Use provided password
+        assert config["port"] == 47012  # Fixed port from environment
+        assert config["skip-cert-verify"] is True
+        assert config["alpn"] == ["h3"]
+        assert config["obfs"] == "salamander"
+        assert config["obfs-password"] == "test-obfs-password"
+        assert config["sni"] == "i.am.com"
+        assert config["up"] == 50
+        assert config["down"] == 200
+
+    @patch('src.proxy_config.settings')
+    def test_generate_hysteria2_config_without_password(self, mock_settings, config_file: Path) -> None:
+        """Test Hysteria2 configuration generation without provided password."""
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_port = 47012
         proxy_config = ProxyConfig(str(config_file))
@@ -139,7 +162,8 @@ class TestProxyConfig:
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
-        assert "password" in config
+        assert "password" in config  # Generated password
+        assert config["password"] != "custom-password-123"  # Should be different
         assert config["port"] == 47012  # Fixed port from environment
         assert config["skip-cert-verify"] is True
         assert config["alpn"] == ["h3"]
