@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=8000)
 
+    # Proxy configuration
+    proxy_config: str = Field(default="")
+
     # Logging
     log_level: str = Field(default="INFO")
 

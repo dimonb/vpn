@@ -1,18 +1,20 @@
 # CFG App
 
-Python application for proxy rule processing and NETSET expansion with support for multiple configuration formats and authentication.
+Python application for proxy rule processing and NETSET expansion, designed to work as a Cloudflare Worker replacement.
 
 ## Features
 
-- **Multiple Configuration Formats**: Support for CLASH YAML and SHADOWROCKET configurations
-- **Authentication**: Optional authentication using query parameters with SHA256 hash verification
-- **RULE-SET Expansion**: Automatic expansion of RULE-SET entries from remote URLs
-- **NETSET Processing**: Support for NETSET files with IP aggregation
-- **IP Aggregation**: IPv4/IPv6 CIDR block aggregation for optimized routing
+- **Template Processing**: Process templates with RULE-SET and NETSET expansion
+- **Authentication**: Built-in authentication system
+- **Clash Support**: Full Clash YAML configuration processing
+- **Proxy Configuration**: Dynamic proxy generation from JSON configuration
+- **IP Aggregation**: Smart IP block aggregation and deduplication
 
 ## Configuration
 
 ### Environment Variables
+
+Create a `.env` file based on `env.example`:
 
 ```bash
 # API Configuration
@@ -30,96 +32,124 @@ IPV6_BLOCK_PREFIX=32
 HOST=0.0.0.0
 PORT=8000
 
+# Proxy Configuration
+PROXY_CONFIG=/path/to/proxy_config.json
+
 # Logging
 LOG_LEVEL=INFO
 ```
 
-## Template Tags
+### Proxy Configuration
 
-Templates support tags in the first line to control processing behavior:
+The `PROXY_CONFIG` environment variable should point to a JSON file with the following structure:
 
-### Available Tags
+```json
+{
+  "users": [
+    "dimonb",
+    "diakon", 
+    "ivan",
+    "petrov"
+  ],
+  "subs": {
+    "default": {
+      "DE_1_CONTABO": {"protocol": "hy2", "host": "de-1.contabo.v.dimonb.com"},
+      "US_1_VULTR": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"},
+      "SG_1_LINODE": {"protocol": "vless", "host": "sg-1.linode.v.dimonb.com"}
+    }
+  }
+}
+```
 
-- `#CLASH` - Process as CLASH YAML configuration
-- `#SHADOWROCKET` - Process as SHADOWROCKET configuration (default)
-- `#AUTH` - Require authentication via query parameters
+#### Supported Protocols
 
-### Examples
+- **hy2**: Hysteria2 protocol
+- **vmess**: VMess protocol  
+- **vless**: VLESS protocol
+
+## Clash Configuration
+
+The app supports Clash YAML templates with special placeholders:
+
+### PROXY_CONFIGS
+
+Replace with generated proxy configurations:
+
+```yaml
+proxies:
+  - PROXY_CONFIGS
+```
+
+### PROXY_LIST
+
+Replace with list of proxy names:
+
+```yaml
+proxy-groups:
+  - name: PROXY
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 100
+    proxies:
+      - PROXY_LIST
+```
+
+### Example Clash Template
 
 ```yaml
 #CLASH,AUTH
+
 mixed-port: 7890
-# ... rest of CLASH config
-```
+allow-lan: true
+mode: Rule
+log-level: info
 
-```ini
-#SHADOWROCKET
-[General]
-# ... rest of Shadowrocket config
-```
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://8.8.8.8/dns-query
 
-## Authentication
+proxies:
+  - PROXY_CONFIGS
 
-When `AUTH` tag is present, the application requires authentication via query parameters:
+proxy-groups:
+  - name: PROXY
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 600
+    tolerance: 100
+    proxies:
+      - PROXY_LIST
 
-- `u=username` - Username
-- `hash=sha256_hash` - SHA256 hash of `username.salt`
-
-### Hash Calculation
-
-```python
-import hashlib
-
-username = "testuser"
-salt = "your-secret-salt"
-hash_value = hashlib.sha256(f"{username}.{salt}".encode()).hexdigest()
-```
-
-### Example URL
-
-```
-https://example.com/config.tpl?u=testuser&hash=a1b2c3d4e5f6...
-```
-
-## RULE-SET Processing
-
-The application automatically expands RULE-SET entries from remote URLs:
-
-### CLASH Format
-
-```yaml
 rules:
-  - RULE-SET,https://example.com/list.txt,PROXY
-  - DOMAIN-SUFFIX,example.com,PROXY
+  - DOMAIN-SUFFIX,whatismyipaddress.com,PROXY
+  - RULE-SET,https://s.dimonb.com/lists/google.list,PROXY
+  - MATCH,DIRECT
 ```
 
-### Shadowrocket Format
+## Installation
 
-```ini
-[Rule]
-RULE-SET,https://example.com/list.txt,PROXY
-DOMAIN-SUFFIX,example.com,PROXY
-```
-
-## NETSET Support
-
-RULE-SET files can contain NETSET references:
-
-```
-#NETSET https://example.com/netset.txt
-DOMAIN,example.com,PROXY
-```
-
-NETSET files are automatically fetched and expanded with IP aggregation.
-
-## Development
-
-### Installation
-
+1. Install dependencies:
 ```bash
-cd vpn/cfgapp
 poetry install
 ```
+
+2. Set up environment variables:
+```bash
+cp env.example .env
+# Edit .env with your configuration
+```
+
+3. Run the application:
+```bash
+poetry run python -m src.main
+```
+
+## Development
 
 ### Running Tests
 
@@ -127,23 +157,27 @@ poetry install
 poetry run pytest tests/ -v
 ```
 
-### Running the Application
+### Code Quality
 
 ```bash
-poetry run python src/main.py
+poetry run ruff check src/ tests/
+poetry run ruff format src/ tests/
 ```
 
 ## API Endpoints
 
-- `GET /health` - Health check
-- `GET /{path}` - Main proxy handler for template processing
+- `GET /health` - Health check endpoint
+- `GET /{path:path}` - Main proxy handler for all other requests
 
-## Examples
+## Template Tags
 
-See the `examples/` directory for template examples:
+- `#CLASH` - Process as Clash YAML configuration
+- `#AUTH` - Require authentication for the template
+- `#SHADOWROCKET` - Process as Shadowrocket configuration
 
-- `clash_with_auth.tpl` - CLASH configuration with authentication
-- `shadowrocket.tpl` - Shadowrocket configuration
+## License
+
+MIT License
 
 
 

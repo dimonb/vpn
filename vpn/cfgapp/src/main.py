@@ -11,6 +11,7 @@ from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
 from .processor import TemplateProcessor
+from .proxy_config import ProxyConfig
 
 # Configure logging
 logging.basicConfig(
@@ -19,15 +20,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Global proxy config instance
+proxy_config: ProxyConfig | None = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown."""
+    global proxy_config
+    
     # Startup
     logger.info("CFG App starting up...")
     logger.info(f"Config Host: {settings.config_host}")
     logger.info(f"IPv4 Block Prefix: /{settings.ipv4_block_prefix}")
     logger.info(f"IPv6 Block Prefix: /{settings.ipv6_block_prefix}")
+    
+    # Initialize proxy config if path is provided
+    if settings.proxy_config:
+        try:
+            proxy_config = ProxyConfig(settings.proxy_config)
+            logger.info(f"Proxy config initialized from: {settings.proxy_config}")
+        except Exception as e:
+            logger.error(f"Failed to initialize proxy config: {e}")
+            proxy_config = None
+    else:
+        logger.info("No proxy config path provided, proxy features disabled")
 
     yield
 
@@ -135,7 +152,7 @@ async def proxy_handler(request: Request, path: str):
             # Process based on template type
             if 'CLASH' in tags:
                 # Process as CLASH YAML
-                clash_processor = ClashProcessor(template_processor)
+                clash_processor = ClashProcessor(template_processor, proxy_config)
                 final_body = await clash_processor.process_clash_config(
                     tpl_text,
                     request.headers.get('host', ''),

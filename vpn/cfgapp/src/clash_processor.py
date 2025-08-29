@@ -1,22 +1,29 @@
 """CLASH YAML configuration processor."""
 
-from typing import Any
+import logging
+from typing import Any, Optional
 
 import yaml
 
 from .processor import TemplateProcessor
+from .proxy_config import ProxyConfig
+
+logger = logging.getLogger(__name__)
 
 
 class ClashProcessor:
     """Processor for CLASH YAML configurations."""
 
-    def __init__(self, template_processor: TemplateProcessor):
+    def __init__(self, template_processor: TemplateProcessor, 
+                 proxy_config: Optional[ProxyConfig] = None):
         """Initialize CLASH processor.
 
         Args:
             template_processor: TemplateProcessor instance for RULE-SET expansion
+            proxy_config: Optional ProxyConfig instance for proxy generation
         """
         self.template_processor = template_processor
+        self.proxy_config = proxy_config
 
     def parse_clash_yaml(self, yaml_content: str) -> dict[str, Any]:
         """Parse CLASH YAML content.
@@ -93,6 +100,43 @@ class ClashProcessor:
 
         return expanded_rules
 
+    def replace_proxy_placeholders(self, clash_config: dict[str, Any]) -> dict[str, Any]:
+        """Replace PROXY_CONFIGS and PROXY_LIST placeholders with actual data.
+
+        Args:
+            clash_config: Parsed CLASH configuration
+
+        Returns:
+            Updated CLASH configuration with replaced placeholders
+        """
+        if not self.proxy_config:
+            logger.warning("No proxy config available, skipping proxy placeholder replacement")
+            return clash_config
+
+        try:
+            # Replace PROXY_CONFIGS in proxies section
+            if 'proxies' in clash_config:
+                proxies = clash_config['proxies']
+                if isinstance(proxies, list) and len(proxies) == 1 and proxies[0] == 'PROXY_CONFIGS':
+                    proxy_configs = self.proxy_config.generate_proxy_configs()
+                    clash_config['proxies'] = proxy_configs
+                    logger.info(f"Replaced PROXY_CONFIGS with {len(proxy_configs)} proxy configurations")
+
+            # Replace PROXY_LIST in proxy-groups section
+            if 'proxy-groups' in clash_config:
+                for group in clash_config['proxy-groups']:
+                    if isinstance(group, dict) and 'proxies' in group:
+                        proxies = group['proxies']
+                        if isinstance(proxies, list) and len(proxies) == 1 and proxies[0] == 'PROXY_LIST':
+                            proxy_list = self.proxy_config.get_proxy_list()
+                            group['proxies'] = proxy_list
+                            logger.info(f"Replaced PROXY_LIST with {len(proxy_list)} proxy names")
+
+        except Exception as e:
+            logger.error(f"Error replacing proxy placeholders: {e}")
+
+        return clash_config
+
     async def process_clash_config(self, yaml_content: str,
                                  incoming_host: str, request_headers: dict) -> str:
         """Process CLASH YAML configuration and expand RULE-SET entries.
@@ -108,12 +152,15 @@ class ClashProcessor:
         # Parse YAML
         clash_config = self.parse_clash_yaml(yaml_content)
 
+        # Replace proxy placeholders first
+        clash_config = self.replace_proxy_placeholders(clash_config)
+
         # Extract RULE-SET entries
         rule_sets = self.extract_rule_sets(clash_config)
 
         if not rule_sets:
-            # No RULE-SET entries found, return original content
-            return yaml_content
+            # No RULE-SET entries found, return processed content
+            return yaml.dump(clash_config, default_flow_style=False, allow_unicode=True)
 
         # Expand RULE-SET entries
         expanded_rules = await self.expand_rule_sets(rule_sets, incoming_host, request_headers)
