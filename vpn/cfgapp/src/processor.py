@@ -25,11 +25,11 @@ class TemplateProcessor:
         """Fetch URL with smart proxying for same/ALT hosts."""
         parsed_url = urlparse(url_str)
         
-        if parsed_url.netloc in (incoming_host, settings.alt_host):
-            # Proxy via API_HOST for same/ALT hosts
+        if parsed_url.netloc == incoming_host:
+            # Proxy via API_HOST for same host
             path = parsed_url.path + ('?' + parsed_url.query if parsed_url.query else '')
             proxy_url = f"https://{settings.api_host}{path}"
-            print(f"Same/ALT host detected; proxy via origin for: {path}")
+            print(f"Same host detected; proxy via origin for: {path}")
             
             headers = dict(request_headers)
             headers.pop('cookie', None)  # Remove cookies
@@ -38,7 +38,8 @@ class TemplateProcessor:
             response.raise_for_status()
             return response.text
         else:
-            # Direct fetch for external URLs
+            # Direct fetch for external URLs (including ALT_HOST)
+            print(f"Direct fetch for: {url_str}")
             response = await self.http_client.get(url_str)
             response.raise_for_status()
             return response.text
