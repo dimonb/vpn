@@ -219,6 +219,7 @@ proxy-groups:
                                    sample_clash_yaml: str) -> None:
         """Test that generated proxy configs have correct structure."""
         mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_port = 47012
         
         clash_config = clash_processor.parse_clash_yaml(sample_clash_yaml)
         request_headers = {}
@@ -231,7 +232,7 @@ proxy-groups:
         for config in hysteria2_configs:
             assert 'name' in config
             assert 'server' in config
-            assert 'port' in config
+            assert config['port'] == 47012  # Fixed port from environment
             assert 'password' in config
             assert config['sni'] == 'i.am.com'
             assert config['skip-cert-verify'] is True

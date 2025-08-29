@@ -130,6 +130,7 @@ class TestProxyConfig:
     def test_generate_hysteria2_config(self, mock_settings, config_file: Path) -> None:
         """Test Hysteria2 configuration generation."""
         mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_port = 47012
         proxy_config = ProxyConfig(str(config_file))
         config = proxy_config._generate_hysteria2_config(
             "test.host.com", "TEST_PROXY"
@@ -139,7 +140,7 @@ class TestProxyConfig:
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
         assert "password" in config
-        assert "port" in config
+        assert config["port"] == 47012  # Fixed port from environment
         assert config["skip-cert-verify"] is True
         assert config["alpn"] == ["h3"]
         assert config["obfs"] == "salamander"

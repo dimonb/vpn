@@ -146,7 +146,7 @@ class ProxyConfig:
         
         # Generate random password and other parameters
         password = self._generate_password(proxy_name)
-        port = self._generate_port(proxy_name)
+        port = settings.hysteria2_port  # Use fixed port from environment variable
         
         return {
             "name": name,
