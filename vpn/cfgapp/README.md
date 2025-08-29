@@ -87,6 +87,17 @@ The system generates **one proxy configuration per proxy entry** in the subscrip
 - **OBFS_PASSWORD**: Password for obfs (obfuscation) in Hysteria2 protocol
 - **HYSTERIA2_PORT**: Fixed port number for Hysteria2 proxies (default: 47012)
 
+#### Password Configuration
+
+The system supports two password modes for Hysteria2 proxies:
+
+1. **Generated Password**: If no `hash` query parameter is provided, the system generates a deterministic password based on the proxy name
+2. **Custom Password**: If `hash` query parameter is provided, it will be used as the password for Hysteria2 proxies
+
+Example:
+- `GET /clash.tpl` - Uses generated password
+- `GET /clash.tpl?hash=30dfb07872c73a324ec6692a00872e5cd1f4d99ee2c4a0a9d210ea7b8a1d48e6` - Uses provided password
+
 ## Clash Configuration
 
 The app supports Clash YAML templates with special placeholders:
@@ -218,4 +229,5 @@ GET /clash.tpl?sub=premium&hash=30dfb07872c73a324ec6692a00872e5cd1f4d99ee2c4a0a9
 ## Installation
 
 1. Install dependencies:
+```
 ```
