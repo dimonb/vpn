@@ -10,6 +10,9 @@ endif
 # Default values if .env file doesn't exist
 SALT ?= ""
 OBFS_PASSWORD ?= ""
+HTTP_PORT ?= "80"
+HTTPS_PORT ?= "443"
+HYSTERIA2_PORT ?= "47012"
 
 install-docker:
 	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 install_docker.yml
@@ -23,9 +26,10 @@ check-env:
 		echo "ERROR: OBFS_PASSWORD is not set. Please create .env file from env.example and set OBFS_PASSWORD value"; \
 		exit 1; \
 	fi
+	@echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT)"
 
 deploy: check-env
-	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)"
+	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)"
 
 deploy-test:
 	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-1 deploy_v2ray.yml
@@ -51,6 +55,7 @@ cn:
 passwords:
 	@set -e; \
 	if [ -z "$(SALT)" ]; then echo "ERROR: SALT is not set. Create .env from env.example and set SALT"; exit 1; fi; \
+	echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT)"; \
 	if command -v sha256sum >/dev/null 2>&1; then HASH="sha256sum"; \
 	elif command -v shasum >/dev/null 2>&1; then HASH="shasum -a 256"; \
 	else echo "ERROR: sha256 utility not found (install coreutils or use shasum)"; exit 1; fi; \
