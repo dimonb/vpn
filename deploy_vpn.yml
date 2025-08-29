@@ -49,16 +49,16 @@
 
     - name: Deploy configuration files using templates
       ansible.builtin.template:
-        src: "vpn/{{ item.src }}"
+        src: "{{ item.src }}"
         dest: "{{ config_directory }}/{{ item.dest }}"
         owner: "{{ config_owner }}"
         group: "{{ config_group }}"
         mode: "{{ item.mode }}"
       loop:
-        - { src: './users.json', dest: 'users.json', mode: '0644' }
-        - { src: './sing-box.json.j2', dest: 'sing-box.json', mode: '0644' }
-        - { src: './docker-compose.yml.j2', dest: 'docker-compose.yml', mode: '0644' }
-        - { src: './Caddyfile.j2', dest: 'Caddyfile', mode: '0644' }
+        - { src: './config.json', dest: 'config.json', mode: '0644' }
+        - { src: './vpn/sing-box.json.j2', dest: 'sing-box.json', mode: '0644' }
+        - { src: './vpn/docker-compose.yml.j2', dest: 'docker-compose.yml', mode: '0644' }
+        - { src: './vpn/Caddyfile.j2', dest: 'Caddyfile', mode: '0644' }
 
     - name: Run Docker Compose
       ansible.builtin.shell:

@@ -1,4 +1,4 @@
-{% set users = lookup('file', 'users.json') | from_json %}
+{% set config = lookup('file', 'config.json') | from_json %}
 {
   "log": { "level": "info" },
   "inbounds": [
@@ -8,7 +8,7 @@
       "listen": "0.0.0.0",
       "listen_port": {{ hysteria2_port | default(47012) }},
       "users": [
-        {% for user in users %}
+        {% for user in config.users %}
             { "name": "{{ user }}", 
               "password": "{{ (user + '.' + salt) | hash('sha256') }}"
             }

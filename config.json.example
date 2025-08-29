@@ -1,0 +1,13 @@
+{
+  "users": [
+    "dimonb",
+    "diakon", 
+    "ivan",
+    "petrov"
+  ],
+  "subs": {
+    "default": {
+      "DE_1_CONTABO": {"protocol": "hy2", "host": "xxxx"}
+    }
+  }
+}

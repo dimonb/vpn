@@ -34,6 +34,10 @@ check-env:
 deploy: check-env
 	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "config_host=$(CONFIG_HOST)"
 
+
+cfgapp-dev:
+	@cd vpn/cfgapp && HYSTERIA2_PORT=$(HYSTERIA2_PORT) SALT=$(SALT) CONFIG_HOST=$(CONFIG_HOST) .venv/bin/poetry run python -m src.main
+
 deploy-test:
 	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-1 deploy_v2ray.yml
 
