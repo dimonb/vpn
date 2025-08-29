@@ -67,7 +67,7 @@ passwords:
 	if command -v sha256sum >/dev/null 2>&1; then HASH="sha256sum"; \
 	elif command -v shasum >/dev/null 2>&1; then HASH="shasum -a 256"; \
 	else echo "ERROR: sha256 utility not found (install coreutils or use shasum)"; exit 1; fi; \
-	jq -r '.[]' vpn/users.json | while read -r user; do \
+	jq -r '.users[]' config.json | while read -r user; do \
 	  pass=$$(printf "%s" "$$user.$(SALT)" | $$HASH | awk '{print $$1}'); \
 	  echo "$$user: $$pass"; \
 	done

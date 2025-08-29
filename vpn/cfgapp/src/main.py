@@ -142,7 +142,7 @@ async def proxy_handler(request: Request, path: str):
 
         # Check authentication if AUTH tag is present
         if 'AUTH' in tags:
-            require_auth(request)
+            require_auth(request, proxy_config)
 
         # Create HTTP client for template processor
         async with httpx.AsyncClient() as http_client:

@@ -15,7 +15,6 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./caddy:/data/
       - ./logs:/logs/
-      - ./config.json:/config.json
   cfgapp:
     build:
       context: ./cfgapp
@@ -36,6 +35,7 @@ services:
       - LOG_LEVEL=INFO
     volumes:
       - ./cfgapp:/app
+      - ./config.json:/config.json
     depends_on:
       - proxy
 
