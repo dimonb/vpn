@@ -13,7 +13,7 @@ OBFS_PASSWORD ?= ""
 HTTP_PORT ?= "80"
 HTTPS_PORT ?= "443"
 HYSTERIA2_PORT ?= "47012"
-
+CONFIG_HOST ?= "fake.host"
 
 .PHONY: install-docker check-env deploy deploy-test cn passwords
 
@@ -32,7 +32,7 @@ check-env:
 	@echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT)"
 
 deploy: check-env
-	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)"
+	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "config_host=$(CONFIG_HOST)"
 
 deploy-test:
 	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-1 deploy_v2ray.yml

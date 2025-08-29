@@ -4,22 +4,24 @@
   become: true
   vars:
     config_directory: vpn
+    config_owner: root
+    config_group: root
 
   tasks:
     - name: Ensure the configuration directory exists
       ansible.builtin.file:
         path: "{{ config_directory }}"
         state: directory
-        owner: root
-        group: root
+        owner: "{{ config_owner }}"
+        group: "{{ config_group }}"
         mode: '0700'
 
     - name: Ensure the cert directory exists
       ansible.builtin.file:
         path: "{{ config_directory }}/cert"
         state: directory
-        owner: root
-        group: root
+        owner: "{{ config_owner }}"
+        group: "{{ config_group }}"
         mode: '0700'
 
     - name: Generate self-signed certificate
@@ -28,12 +30,29 @@
       args:
         creates: "{{ config_directory }}/cert/cert.pem"
 
+
+    - name: copy cfgapp Python files and configs to the server
+      ansible.builtin.synchronize:
+        src: ./vpn/cfgapp/
+        dest: "{{ config_directory }}/cfgapp/"
+        rsync_opts:
+          - "--exclude=__pycache__"
+          - "--exclude=.*"
+
+    - name: Set correct permissions for cfgapp files
+      ansible.builtin.file:
+        path: "{{ config_directory }}/cfgapp"
+        owner: "{{ config_owner }}"
+        group: "{{ config_group }}"
+        mode: '0755'
+        recurse: true
+
     - name: Deploy configuration files using templates
       ansible.builtin.template:
         src: "vpn/{{ item.src }}"
         dest: "{{ config_directory }}/{{ item.dest }}"
-        owner: root
-        group: root
+        owner: "{{ config_owner }}"
+        group: "{{ config_group }}"
         mode: "{{ item.mode }}"
       loop:
         - { src: './users.json', dest: 'users.json', mode: '0644' }

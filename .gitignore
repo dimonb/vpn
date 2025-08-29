@@ -1,6 +1,11 @@
 *.tmp.*
 *.tmp
 .env
+
+.pytest_cache
+.ruff_cache
+.venv
+
 servers.cfg
 vpn/users.json
 __pycache__

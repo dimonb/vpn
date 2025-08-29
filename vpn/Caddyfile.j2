@@ -1,7 +1,7 @@
 http://{{ ansible_host }}:{{ http_port | default(80) }} {
 
   log {
-    output file /logs/access-v2ray.log {
+    output file /logs/access-caddy.log {
                        roll_size 1gb
                        roll_keep 5
                        roll_keep_for 720h
@@ -9,12 +9,10 @@ http://{{ ansible_host }}:{{ http_port | default(80) }} {
                level INFO
  
   }
-  @v2ray_websocket {
-    path /ws
-    header Connection *Upgrade*
-    header Upgrade websocket
+  @cfgapp {
+    path /
   }
-  reverse_proxy @v2ray_websocket 127.0.0.1:10000
+  reverse_proxy @cfgapp 127.0.0.1:8003
 
 }
 
@@ -22,7 +20,7 @@ http://{{ ansible_host }}:{{ http_port | default(80) }} {
  https://{{ ansible_host }}:{{ https_port | default(443) }} {
 
   log {
-    output file /logs/access-v2ray.log {
+    output file /logs/access-caddy.log {
                        roll_size 1gb
                        roll_keep 5
                        roll_keep_for 720h
@@ -35,12 +33,10 @@ http://{{ ansible_host }}:{{ http_port | default(80) }} {
     ciphers TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
     curves x25519
   }
-  @v2ray_websocket {
-    path /ws
-    header Connection *Upgrade*
-    header Upgrade websocket
+  @cfgapp {
+    path /
   }
-  reverse_proxy @v2ray_websocket 127.0.0.1:10000
+  reverse_proxy @cfgapp 127.0.0.1:8003
 
   @openvpn path /openvpn/metrics*
   handle @openvpn {
