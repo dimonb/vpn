@@ -3,3 +3,4 @@
 .env
 servers.cfg
 vpn/users.json
+__pycache__
