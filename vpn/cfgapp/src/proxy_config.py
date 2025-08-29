@@ -3,7 +3,9 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -58,78 +60,93 @@ class ProxyConfig:
         """
         return self.config_data.get('subs', {})
 
-    def generate_proxy_configs(self) -> List[Dict[str, Any]]:
-        """Generate proxy configurations for all protocols and users.
+    def get_subscription_proxies(self, sub_name: Optional[str] = None) -> Dict[str, Any]:
+        """Get proxies for specific subscription.
+
+        Args:
+            sub_name: Subscription name, defaults to 'default'
 
         Returns:
-            List of proxy configurations
+            Dictionary of proxy configurations for the subscription
+        """
+        subs = self.get_subs()
+        if not sub_name:
+            sub_name = 'default'
+        
+        if sub_name not in subs:
+            logger.warning(f"Subscription '{sub_name}' not found, using 'default'")
+            sub_name = 'default'
+        
+        return subs.get(sub_name, {})
+
+    def generate_proxy_configs(self, sub_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Generate proxy configurations for all protocols in subscription.
+
+        Args:
+            sub_name: Subscription name, defaults to 'default'
+
+        Returns:
+            List of proxy configurations (one per proxy in subscription)
         """
         proxy_configs = []
-        users = self.get_users()
-        subs = self.get_subs()
+        subscription_proxies = self.get_subscription_proxies(sub_name)
 
-        for sub_name, sub_config in subs.items():
-            for proxy_name, proxy_config in sub_config.items():
-                protocol = proxy_config.get('protocol', '')
-                host = proxy_config.get('host', '')
+        for proxy_name, proxy_config in subscription_proxies.items():
+            protocol = proxy_config.get('protocol', '')
+            host = proxy_config.get('host', '')
 
-                if not protocol or not host:
-                    logger.warning(f"Invalid proxy config: {proxy_name}")
-                    continue
+            if not protocol or not host:
+                logger.warning(f"Invalid proxy config: {proxy_name}")
+                continue
 
-                # Generate config for each user
-                for user in users:
-                    proxy_config = self._generate_proxy_config(
-                        protocol, host, user, proxy_name
-                    )
-                    if proxy_config:
-                        proxy_configs.append(proxy_config)
+            # Generate one config per proxy (not per user)
+            proxy_config = self._generate_proxy_config(
+                protocol, host, proxy_name
+            )
+            if proxy_config:
+                proxy_configs.append(proxy_config)
 
-        logger.info(f"Generated {len(proxy_configs)} proxy configurations")
+        logger.info(f"Generated {len(proxy_configs)} proxy configurations for subscription '{sub_name or 'default'}'")
         return proxy_configs
 
     def _generate_proxy_config(self, protocol: str, host: str, 
-                              user: str, proxy_name: str) -> Dict[str, Any]:
+                              proxy_name: str) -> Dict[str, Any]:
         """Generate proxy configuration for specific protocol.
 
         Args:
             protocol: Proxy protocol (e.g., 'hy2', 'vmess', etc.)
             host: Proxy host
-            user: Username
             proxy_name: Proxy name
 
         Returns:
             Proxy configuration dictionary
         """
         if protocol == 'hy2':
-            return self._generate_hysteria2_config(host, user, proxy_name)
+            return self._generate_hysteria2_config(host, proxy_name)
         elif protocol == 'vmess':
-            return self._generate_vmess_config(host, user, proxy_name)
+            return self._generate_vmess_config(host, proxy_name)
         elif protocol == 'vless':
-            return self._generate_vless_config(host, user, proxy_name)
+            return self._generate_vless_config(host, proxy_name)
         else:
             logger.warning(f"Unsupported protocol: {protocol}")
             return {}
 
-    def _generate_hysteria2_config(self, host: str, user: str, 
-                                  proxy_name: str) -> Dict[str, Any]:
+    def _generate_hysteria2_config(self, host: str, proxy_name: str) -> Dict[str, Any]:
         """Generate Hysteria2 proxy configuration.
 
         Args:
             host: Proxy host
-            user: Username
             proxy_name: Proxy name
 
         Returns:
             Hysteria2 configuration dictionary
         """
         # Generate unique name
-        name = f"{proxy_name.lower()}-{user}"
+        name = f"{proxy_name.lower()}"
         
         # Generate random password and other parameters
-        # In real implementation, these would be generated based on user/proxy
-        password = self._generate_password(user, proxy_name)
-        port = self._generate_port(user, proxy_name)
+        password = self._generate_password(proxy_name)
+        port = self._generate_port(proxy_name)
         
         return {
             "name": name,
@@ -137,32 +154,30 @@ class ProxyConfig:
             "server": host,
             "port": port,
             "password": password,
-            "sni": host,
+            "sni": "i.am.com",
             "skip-cert-verify": True,
             "alpn": ["h3"],
             "up": 50,
-            "down": 50,
+            "down": 200,
             "obfs": "salamander",
-            "obfs-password": self._generate_obfs_password(user, proxy_name),
+            "obfs-password": settings.obfs_password,
             "fast-open": True,
             "udp": True
         }
 
-    def _generate_vmess_config(self, host: str, user: str, 
-                              proxy_name: str) -> Dict[str, Any]:
+    def _generate_vmess_config(self, host: str, proxy_name: str) -> Dict[str, Any]:
         """Generate VMess proxy configuration.
 
         Args:
             host: Proxy host
-            user: Username
             proxy_name: Proxy name
 
         Returns:
             VMess configuration dictionary
         """
-        name = f"{proxy_name.lower()}-{user}"
-        uuid = self._generate_uuid(user, proxy_name)
-        port = self._generate_port(user, proxy_name)
+        name = f"{proxy_name.lower()}"
+        uuid = self._generate_uuid(proxy_name)
+        port = self._generate_port(proxy_name)
         
         return {
             "name": name,
@@ -178,21 +193,19 @@ class ProxyConfig:
             "udp": True
         }
 
-    def _generate_vless_config(self, host: str, user: str, 
-                              proxy_name: str) -> Dict[str, Any]:
+    def _generate_vless_config(self, host: str, proxy_name: str) -> Dict[str, Any]:
         """Generate VLESS proxy configuration.
 
         Args:
             host: Proxy host
-            user: Username
             proxy_name: Proxy name
 
         Returns:
             VLESS configuration dictionary
         """
-        name = f"{proxy_name.lower()}-{user}"
-        uuid = self._generate_uuid(user, proxy_name)
-        port = self._generate_port(user, proxy_name)
+        name = f"{proxy_name.lower()}"
+        uuid = self._generate_uuid(proxy_name)
+        port = self._generate_port(proxy_name)
         
         return {
             "name": name,
@@ -207,11 +220,10 @@ class ProxyConfig:
             "udp": True
         }
 
-    def _generate_password(self, user: str, proxy_name: str) -> str:
+    def _generate_password(self, proxy_name: str) -> str:
         """Generate password for proxy.
 
         Args:
-            user: Username
             proxy_name: Proxy name
 
         Returns:
@@ -219,14 +231,13 @@ class ProxyConfig:
         """
         # Simple hash-based generation for demo
         import hashlib
-        base = f"{user}:{proxy_name}"
-        return hashlib.md5(base.encode()).hexdigest()[:20]
+        base = f"{proxy_name}"
+        return hashlib.sha256(base.encode()).hexdigest()
 
-    def _generate_port(self, user: str, proxy_name: str) -> int:
+    def _generate_port(self, proxy_name: str) -> int:
         """Generate port for proxy.
 
         Args:
-            user: Username
             proxy_name: Proxy name
 
         Returns:
@@ -234,15 +245,14 @@ class ProxyConfig:
         """
         # Simple hash-based generation for demo
         import hashlib
-        base = f"{user}:{proxy_name}:port"
+        base = f"{proxy_name}:port"
         hash_val = int(hashlib.md5(base.encode()).hexdigest()[:8], 16)
         return 40000 + (hash_val % 10000)
 
-    def _generate_uuid(self, user: str, proxy_name: str) -> str:
+    def _generate_uuid(self, proxy_name: str) -> str:
         """Generate UUID for proxy.
 
         Args:
-            user: Username
             proxy_name: Proxy name
 
         Returns:
@@ -251,31 +261,20 @@ class ProxyConfig:
         import hashlib
         import uuid
         
-        base = f"{user}:{proxy_name}:uuid"
+        base = f"{proxy_name}:uuid"
         hash_val = hashlib.md5(base.encode()).hexdigest()
         
         # Convert to UUID format
         return str(uuid.UUID(hash_val))
 
-    def _generate_obfs_password(self, user: str, proxy_name: str) -> str:
-        """Generate obfs password for proxy.
+    def get_proxy_list(self, sub_name: Optional[str] = None) -> List[str]:
+        """Get list of proxy names for PROXY_LIST.
 
         Args:
-            user: Username
-            proxy_name: Proxy name
-
-        Returns:
-            Generated obfs password
-        """
-        import hashlib
-        base = f"{user}:{proxy_name}:obfs"
-        return hashlib.md5(base.encode()).hexdigest()[:10]
-
-    def get_proxy_list(self) -> List[str]:
-        """Get list of proxy names for PROXY_LIST.
+            sub_name: Subscription name, defaults to 'default'
 
         Returns:
             List of proxy names
         """
-        proxy_configs = self.generate_proxy_configs()
+        proxy_configs = self.generate_proxy_configs(sub_name)
         return [config['name'] for config in proxy_configs]

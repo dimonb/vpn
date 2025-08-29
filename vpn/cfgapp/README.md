@@ -8,6 +8,7 @@ Python application for proxy rule processing and NETSET expansion, designed to w
 - **Authentication**: Built-in authentication system
 - **Clash Support**: Full Clash YAML configuration processing
 - **Proxy Configuration**: Dynamic proxy generation from JSON configuration
+- **Subscription Support**: Multiple subscription tiers with query parameter selection
 - **IP Aggregation**: Smart IP block aggregation and deduplication
 
 ## Configuration
@@ -34,6 +35,7 @@ PORT=8000
 
 # Proxy Configuration
 PROXY_CONFIG=/path/to/proxy_config.json
+OBFS_PASSWORD=your-obfs-password-here
 
 # Logging
 LOG_LEVEL=INFO
@@ -54,7 +56,9 @@ The `PROXY_CONFIG` environment variable should point to a JSON file with the fol
   "subs": {
     "default": {
       "DE_1_CONTABO": {"protocol": "hy2", "host": "de-1.contabo.v.dimonb.com"},
-      "US_1_VULTR": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"},
+      "US_1_VULTR": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"}
+    },
+    "premium": {
       "SG_1_LINODE": {"protocol": "vless", "host": "sg-1.linode.v.dimonb.com"}
     }
   }
@@ -66,6 +70,12 @@ The `PROXY_CONFIG` environment variable should point to a JSON file with the fol
 - **hy2**: Hysteria2 protocol
 - **vmess**: VMess protocol  
 - **vless**: VLESS protocol
+
+#### Subscription Selection
+
+- **Default**: Uses `subs.default` if no query parameter is provided
+- **Custom**: Use query parameter `?sub=premium` to select specific subscription
+- **Fallback**: If specified subscription doesn't exist, falls back to `default`
 
 ## Clash Configuration
 
@@ -129,6 +139,60 @@ rules:
   - DOMAIN-SUFFIX,whatismyipaddress.com,PROXY
   - RULE-SET,https://s.dimonb.com/lists/google.list,PROXY
   - MATCH,DIRECT
+```
+
+### Generated Proxy Configuration
+
+The system generates proxy configurations with the following structure:
+
+#### Hysteria2
+```yaml
+- name: de_1_contabo-dimonb
+  type: hysteria2
+  server: de-1.contabo.v.dimonb.com
+  port: 44538
+  password: 00629f20c4bd20b24d4d41674a0eb6639e0ac1b0f2f830102067108bdcbb1433
+  sni: i.am.com
+  skip-cert-verify: true
+  alpn: ["h3"]
+  up: 50
+  down: 200
+  obfs: salamander
+  obfs-password: iHWnSdFq8MKT9AdBN5uu
+  fast-open: true
+  udp: true
+```
+
+#### VMess
+```yaml
+- name: us_1_vultr-dimonb
+  type: vmess
+  server: us-1.vultr.v.dimonb.com
+  port: 47970
+  uuid: 5e284f0f-f2c2-3a95-2197-41e478d9f8cf
+  alterId: 0
+  cipher: auto
+  tls: true
+  servername: us-1.vultr.v.dimonb.com
+  skip-cert-verify: true
+  udp: true
+```
+
+## Usage Examples
+
+### Default Subscription
+```
+GET /clash.tpl
+```
+
+### Premium Subscription
+```
+GET /clash.tpl?sub=premium
+```
+
+### With Authentication
+```
+GET /clash.tpl?sub=premium&u=dimonb&hash=abc123...
 ```
 
 ## Installation

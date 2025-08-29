@@ -100,11 +100,13 @@ class ClashProcessor:
 
         return expanded_rules
 
-    def replace_proxy_placeholders(self, clash_config: dict[str, Any]) -> dict[str, Any]:
+    def replace_proxy_placeholders(self, clash_config: dict[str, Any], 
+                                 request_headers: dict) -> dict[str, Any]:
         """Replace PROXY_CONFIGS and PROXY_LIST placeholders with actual data.
 
         Args:
             clash_config: Parsed CLASH configuration
+            request_headers: Request headers to extract query parameters
 
         Returns:
             Updated CLASH configuration with replaced placeholders
@@ -114,11 +116,22 @@ class ClashProcessor:
             return clash_config
 
         try:
+            # Extract sub parameter from headers (if available)
+            sub_name = None
+            if 'x-query-string' in request_headers:
+                # Parse query string to find 'sub' parameter
+                import urllib.parse
+                query_string = request_headers['x-query-string']
+                query_params = urllib.parse.parse_qs(query_string)
+                if 'sub' in query_params:
+                    sub_name = query_params['sub'][0]
+                    logger.info(f"Using subscription: {sub_name}")
+
             # Replace PROXY_CONFIGS in proxies section
             if 'proxies' in clash_config:
                 proxies = clash_config['proxies']
                 if isinstance(proxies, list) and len(proxies) == 1 and proxies[0] == 'PROXY_CONFIGS':
-                    proxy_configs = self.proxy_config.generate_proxy_configs()
+                    proxy_configs = self.proxy_config.generate_proxy_configs(sub_name)
                     clash_config['proxies'] = proxy_configs
                     logger.info(f"Replaced PROXY_CONFIGS with {len(proxy_configs)} proxy configurations")
 
@@ -128,7 +141,7 @@ class ClashProcessor:
                     if isinstance(group, dict) and 'proxies' in group:
                         proxies = group['proxies']
                         if isinstance(proxies, list) and len(proxies) == 1 and proxies[0] == 'PROXY_LIST':
-                            proxy_list = self.proxy_config.get_proxy_list()
+                            proxy_list = self.proxy_config.get_proxy_list(sub_name)
                             group['proxies'] = proxy_list
                             logger.info(f"Replaced PROXY_LIST with {len(proxy_list)} proxy names")
 
@@ -153,7 +166,7 @@ class ClashProcessor:
         clash_config = self.parse_clash_yaml(yaml_content)
 
         # Replace proxy placeholders first
-        clash_config = self.replace_proxy_placeholders(clash_config)
+        clash_config = self.replace_proxy_placeholders(clash_config, request_headers)
 
         # Extract RULE-SET entries
         rule_sets = self.extract_rule_sets(clash_config)

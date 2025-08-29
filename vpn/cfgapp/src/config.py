@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # Proxy configuration
     proxy_config: str = Field(default="")
+    obfs_password: str = Field(default="")
 
     # Logging
     log_level: str = Field(default="INFO")

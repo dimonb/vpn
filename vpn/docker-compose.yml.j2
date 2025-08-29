@@ -15,6 +15,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./caddy:/data/
       - ./logs:/logs/
+      - ./config.json:/config.json
   cfgapp:
     build:
       context: ./cfgapp
@@ -24,6 +25,8 @@ services:
       - "127.0.0.1:8003:8000"
     environment:
       - CONFIG_HOST={{ config_host }}
+      - PROXY_CONFIG=/config.json
+      - OBFS_PASSWORD={{ obfs_password }}
       - IPV4_BLOCK_PREFIX=18
       - IPV6_BLOCK_PREFIX=32
       - HOST=0.0.0.0

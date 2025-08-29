@@ -149,6 +149,11 @@ async def proxy_handler(request: Request, path: str):
             # Create template processor
             template_processor = TemplateProcessor(http_client)
 
+            # Prepare headers with query string for proxy config
+            request_headers = dict(request.headers)
+            if url.query:
+                request_headers['x-query-string'] = url.query
+
             # Process based on template type
             if 'CLASH' in tags:
                 # Process as CLASH YAML
@@ -156,14 +161,14 @@ async def proxy_handler(request: Request, path: str):
                 final_body = await clash_processor.process_clash_config(
                     tpl_text,
                     request.headers.get('host', ''),
-                    dict(request.headers)
+                    request_headers
                 )
             else:
                 # Process as regular template (SHADOWROCKET or default)
                 final_body = await template_processor.process_template(
                     tpl_text,
                     request.headers.get('host', ''),
-                    dict(request.headers)
+                    request_headers
                 )
 
             return Response(

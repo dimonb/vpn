@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 from typing import Dict, Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import yaml
@@ -26,6 +26,9 @@ class TestClashProcessorIntegration:
                 "default": {
                     "DE_1_CONTABO": {"protocol": "hy2", "host": "de-1.contabo.v.dimonb.com"},
                     "US_1_VULTR": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"}
+                },
+                "premium": {
+                    "SG_1_LINODE": {"protocol": "vless", "host": "sg-1.linode.v.dimonb.com"}
                 }
             }
         }
@@ -88,19 +91,20 @@ rules:
         """Create ClashProcessor instance with ProxyConfig."""
         return ClashProcessor(mock_template_processor, proxy_config)
 
-    def test_replace_proxy_placeholders(self, clash_processor: ClashProcessor, 
-                                      sample_clash_yaml: str) -> None:
-        """Test replacement of PROXY_CONFIGS and PROXY_LIST placeholders."""
+    def test_replace_proxy_placeholders_default(self, clash_processor: ClashProcessor, 
+                                              sample_clash_yaml: str) -> None:
+        """Test replacement of PROXY_CONFIGS and PROXY_LIST placeholders for default subscription."""
         # Parse YAML
         clash_config = clash_processor.parse_clash_yaml(sample_clash_yaml)
         
-        # Replace placeholders
-        updated_config = clash_processor.replace_proxy_placeholders(clash_config)
+        # Replace placeholders with default subscription
+        request_headers = {}
+        updated_config = clash_processor.replace_proxy_placeholders(clash_config, request_headers)
         
         # Check that PROXY_CONFIGS was replaced
         assert 'proxies' in updated_config
         assert isinstance(updated_config['proxies'], list)
-        assert len(updated_config['proxies']) == 4  # 2 proxies * 2 users
+        assert len(updated_config['proxies']) == 2  # 2 proxies (one per proxy, not per user)
         
         # Check that PROXY_LIST was replaced
         assert 'proxy-groups' in updated_config
@@ -108,12 +112,40 @@ rules:
         assert proxy_group['name'] == 'PROXY'
         assert 'proxies' in proxy_group
         assert isinstance(proxy_group['proxies'], list)
-        assert len(proxy_group['proxies']) == 4  # 2 proxies * 2 users
+        assert len(proxy_group['proxies']) == 2  # 2 proxies (one per proxy, not per user)
         
         # Check proxy names
         expected_names = [
-            "de_1_contabo-dimonb", "de_1_contabo-diakon",
-            "us_1_vultr-dimonb", "us_1_vultr-diakon"
+            "de_1_contabo", "us_1_vultr"
+        ]
+        assert set(proxy_group['proxies']) == set(expected_names)
+
+    def test_replace_proxy_placeholders_premium(self, clash_processor: ClashProcessor, 
+                                              sample_clash_yaml: str) -> None:
+        """Test replacement of PROXY_CONFIGS and PROXY_LIST placeholders for premium subscription."""
+        # Parse YAML
+        clash_config = clash_processor.parse_clash_yaml(sample_clash_yaml)
+        
+        # Replace placeholders with premium subscription
+        request_headers = {'x-query-string': 'sub=premium'}
+        updated_config = clash_processor.replace_proxy_placeholders(clash_config, request_headers)
+        
+        # Check that PROXY_CONFIGS was replaced
+        assert 'proxies' in updated_config
+        assert isinstance(updated_config['proxies'], list)
+        assert len(updated_config['proxies']) == 1  # 1 proxy (one per proxy, not per user)
+        
+        # Check that PROXY_LIST was replaced
+        assert 'proxy-groups' in updated_config
+        proxy_group = updated_config['proxy-groups'][0]
+        assert proxy_group['name'] == 'PROXY'
+        assert 'proxies' in proxy_group
+        assert isinstance(proxy_group['proxies'], list)
+        assert len(proxy_group['proxies']) == 1  # 1 proxy (one per proxy, not per user)
+        
+        # Check proxy names
+        expected_names = [
+            "sg_1_linode"
         ]
         assert set(proxy_group['proxies']) == set(expected_names)
 
@@ -126,7 +158,8 @@ rules:
         clash_config = clash_processor.parse_clash_yaml(sample_clash_yaml)
         
         # Replace placeholders (should not change anything)
-        updated_config = clash_processor.replace_proxy_placeholders(clash_config)
+        request_headers = {}
+        updated_config = clash_processor.replace_proxy_placeholders(clash_config, request_headers)
         
         # Should remain unchanged
         assert updated_config == clash_config
@@ -148,7 +181,8 @@ proxy-groups:
 """
         
         clash_config = clash_processor.parse_clash_yaml(yaml_content)
-        updated_config = clash_processor.replace_proxy_placeholders(clash_config)
+        request_headers = {}
+        updated_config = clash_processor.replace_proxy_placeholders(clash_config, request_headers)
         
         # Should remain unchanged
         assert updated_config == clash_config
@@ -170,42 +204,48 @@ proxy-groups:
         
         # Check that placeholders were replaced
         assert 'proxies' in parsed_result
-        assert len(parsed_result['proxies']) == 4
+        assert len(parsed_result['proxies']) == 2  # 2 proxies (one per proxy, not per user)
         
         assert 'proxy-groups' in parsed_result
         proxy_group = parsed_result['proxy-groups'][0]
-        assert len(proxy_group['proxies']) == 4
+        assert len(proxy_group['proxies']) == 2  # 2 proxies (one per proxy, not per user)
         
         # Check that rules section is preserved
         assert 'rules' in parsed_result
         assert len(parsed_result['rules']) == 2
 
-    def test_proxy_config_structure(self, clash_processor: ClashProcessor, 
+    @patch('src.proxy_config.settings')
+    def test_proxy_config_structure(self, mock_settings, clash_processor: ClashProcessor, 
                                    sample_clash_yaml: str) -> None:
         """Test that generated proxy configs have correct structure."""
+        mock_settings.obfs_password = "test-obfs-password"
+        
         clash_config = clash_processor.parse_clash_yaml(sample_clash_yaml)
-        updated_config = clash_processor.replace_proxy_placeholders(clash_config)
+        request_headers = {}
+        updated_config = clash_processor.replace_proxy_placeholders(clash_config, request_headers)
         
         # Check Hysteria2 config structure
         hysteria2_configs = [p for p in updated_config['proxies'] if p['type'] == 'hysteria2']
-        assert len(hysteria2_configs) == 2  # 1 proxy * 2 users
+        assert len(hysteria2_configs) == 1  # 1 proxy (one per proxy, not per user)
         
         for config in hysteria2_configs:
             assert 'name' in config
             assert 'server' in config
             assert 'port' in config
             assert 'password' in config
-            assert 'sni' in config
+            assert config['sni'] == 'i.am.com'
             assert config['skip-cert-verify'] is True
             assert config['alpn'] == ['h3']
             assert config['obfs'] == 'salamander'
-            assert 'obfs-password' in config
+            assert config['obfs-password'] == 'test-obfs-password'
             assert config['fast-open'] is True
             assert config['udp'] is True
+            assert config['up'] == 50
+            assert config['down'] == 200
         
         # Check VMess config structure
         vmess_configs = [p for p in updated_config['proxies'] if p['type'] == 'vmess']
-        assert len(vmess_configs) == 2  # 1 proxy * 2 users
+        assert len(vmess_configs) == 1  # 1 proxy (one per proxy, not per user)
         
         for config in vmess_configs:
             assert 'name' in config
