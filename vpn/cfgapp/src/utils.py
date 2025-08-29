@@ -23,7 +23,7 @@ class IPProcessor:
 
     def __init__(self, ipv4_block_prefix: int = 18, ipv6_block_prefix: int = 32):
         """Initialize processor with block prefix settings.
-        
+
         Args:
             ipv4_block_prefix: Target prefix for IPv4 aggregation (default: 18)
             ipv6_block_prefix: Target prefix for IPv6 aggregation (default: 32)
@@ -33,16 +33,16 @@ class IPProcessor:
 
     def ipv4_cover_blocks(self, cidr: str) -> list[str]:
         """Return list of covering IPv4 blocks with target prefix.
-        
+
         This implements the same logic as the Cloudflare Worker's ipv4CoverBlocks function.
         It takes a CIDR block and returns a list of larger blocks that cover it.
-        
+
         Args:
             cidr: IPv4 CIDR string (e.g., "192.168.1.0/24")
-            
+
         Returns:
             List of covering CIDR blocks with target prefix
-            
+
         Example:
             >>> processor = IPProcessor(ipv4_block_prefix=18)
             >>> processor.ipv4_cover_blocks("192.168.1.0/24")
@@ -87,16 +87,16 @@ class IPProcessor:
 
     def ipv6_cidr_to_blocks(self, cidr: str) -> list[str]:
         """Convert IPv6 CIDR to list of target prefix blocks.
-        
+
         This implements the same logic as the Cloudflare Worker's ipv6CidrToBlocks function.
         It handles IPv6 aggregation by flooring addresses to the target prefix.
-        
+
         Args:
             cidr: IPv6 CIDR string (e.g., "2001:db8::/32")
-            
+
         Returns:
             List of covering CIDR blocks with target prefix
-            
+
         Example:
             >>> processor = IPProcessor(ipv6_block_prefix=32)
             >>> processor.ipv6_cidr_to_blocks("2001:db8::/48")
@@ -129,14 +129,14 @@ class IPProcessor:
 
     def netset_expand(self, text: str, suffix: str) -> list[str]:
         """Expand raw .netset text into lines with IP aggregation.
-        
+
         This implements the same logic as the Cloudflare Worker's netsetExpand function.
         It processes each line, handles IPv4/IPv6 CIDR blocks, and applies aggregation.
-        
+
         Args:
             text: Raw netset text content
             suffix: Suffix to append to each IP-CIDR rule (e.g., ",PROXY,no-resolve")
-            
+
         Returns:
             List of expanded and deduplicated rules
         """
@@ -174,12 +174,12 @@ class IPProcessor:
 
     def dedupe_lines(self, lines: list[str]) -> list[str]:
         """Stable de-duplication while preserving first occurrence order.
-        
+
         This implements the same logic as the Cloudflare Worker's dedupeLines function.
-        
+
         Args:
             lines: List of lines to deduplicate
-            
+
         Returns:
             Deduplicated list preserving order
         """
@@ -200,7 +200,7 @@ class TemplateProcessor:
 
     def __init__(self, ip_processor: IPProcessor):
         """Initialize template processor.
-        
+
         Args:
             ip_processor: IPProcessor instance for handling IP operations
         """
@@ -208,12 +208,12 @@ class TemplateProcessor:
 
     def parse_template(self, template_text: str) -> dict[str, Any]:
         """Parse template text and extract RULE-SET entries.
-        
+
         This implements the same logic as the Cloudflare Worker's parseTemplate function.
-        
+
         Args:
             template_text: Raw template text content
-            
+
         Returns:
             Dictionary with tasks, passthrough lines, and original line count
         """
@@ -239,14 +239,14 @@ class TemplateProcessor:
 
     async def expand_netset(self, url: str, suffix: str, session: aiohttp.ClientSession) -> list[str]:
         """Expand NETSET from URL.
-        
+
         This implements the same logic as the Cloudflare Worker's expandNetset function.
-        
+
         Args:
             url: URL to fetch NETSET from
             suffix: Suffix to append to rules
             session: aiohttp session for HTTP requests
-            
+
         Returns:
             List of expanded rules
         """
@@ -264,13 +264,13 @@ class TemplateProcessor:
 
     async def expand_rule_set(self, task: dict[str, Any], session: aiohttp.ClientSession) -> list[str]:
         """Expand RULE-SET from URL.
-        
+
         This implements the same logic as the Cloudflare Worker's expandRuleSet function.
-        
+
         Args:
             task: Task dictionary with url and suffix
             session: aiohttp session for HTTP requests
-            
+
         Returns:
             List of expanded rules
         """
@@ -333,12 +333,12 @@ class TemplateProcessor:
 
     async def process_template(self, template_text: str) -> str:
         """Process template and expand all RULE-SET entries.
-        
+
         This implements the same logic as the Cloudflare Worker's processTemplate function.
-        
+
         Args:
             template_text: Raw template text content
-            
+
         Returns:
             Processed template with expanded RULE-SET entries
         """
