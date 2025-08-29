@@ -2,6 +2,7 @@
 
 import asyncio
 import re
+import traceback
 from urllib.parse import urlparse
 
 import httpx
@@ -136,6 +137,7 @@ class TemplateProcessor:
 
         except Exception as e:
             print(f"List fetch failed: {url} -> {str(e)}")
+            traceback.print_exc()
             return [f"# RULE-SET fetch failed: {url}"]
 
     async def process_template(self, tpl_text: str, incoming_host: str = "", request_headers: dict = None) -> str:

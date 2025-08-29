@@ -10,7 +10,6 @@ from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
 from .processor import TemplateProcessor
-from .utils import IPProcessor
 
 # Configure logging
 logging.basicConfig(
@@ -125,35 +124,33 @@ async def proxy_handler(request: Request, path: str):
         if 'AUTH' in tags:
             require_auth(request)
 
-        # Create IP processor and template processor
-        ip_processor = IPProcessor(
-            ipv4_block_prefix=settings.ipv4_block_prefix,
-            ipv6_block_prefix=settings.ipv6_block_prefix
-        )
-        template_processor = TemplateProcessor(ip_processor)
+        # Create HTTP client for template processor
+        async with httpx.AsyncClient() as http_client:
+            # Create template processor
+            template_processor = TemplateProcessor(http_client)
 
-        # Process based on template type
-        if 'CLASH' in tags:
-            # Process as CLASH YAML
-            clash_processor = ClashProcessor(template_processor)
-            final_body = await clash_processor.process_clash_config(
-                tpl_text,
-                request.headers.get('host', ''),
-                dict(request.headers)
-            )
-        else:
-            # Process as regular template (SHADOWROCKET or default)
-            final_body = await template_processor.process_template(
-                tpl_text,
-                request.headers.get('host', ''),
-                dict(request.headers)
-            )
+            # Process based on template type
+            if 'CLASH' in tags:
+                # Process as CLASH YAML
+                clash_processor = ClashProcessor(template_processor)
+                final_body = await clash_processor.process_clash_config(
+                    tpl_text,
+                    request.headers.get('host', ''),
+                    dict(request.headers)
+                )
+            else:
+                # Process as regular template (SHADOWROCKET or default)
+                final_body = await template_processor.process_template(
+                    tpl_text,
+                    request.headers.get('host', ''),
+                    dict(request.headers)
+                )
 
-        return Response(
-            content=final_body,
-            status_code=200,
-            headers={"content-type": "text/plain; charset=utf-8"}
-        )
+            return Response(
+                content=final_body,
+                status_code=200,
+                headers={"content-type": "text/plain; charset=utf-8"}
+            )
 
     except Exception as e:
         logger.error(f"Worker error: {str(e)}")
