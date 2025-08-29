@@ -1,4 +1,4 @@
-http://{{ ansible_host }} {
+http://{{ ansible_host }}:8084 {
 
   log {
     output file /logs/access-v2ray.log {
@@ -19,7 +19,7 @@ http://{{ ansible_host }} {
 }
 
 
- https://{{ ansible_host }} {
+ https://{{ ansible_host }}:9443 {
 
   log {
     output file /logs/access-v2ray.log {
