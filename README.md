@@ -14,12 +14,18 @@ cp servers.cfg.example servers.cfg
 # edit servers.cfg
 ```
 
-4. Install Docker on hosts (one-time):
+4. Copy users example and edit users:
+```bash
+cp vpn/users.json.example vpn/users.json
+# edit vpn/users.json
+```
+
+5. Install Docker on hosts (one-time):
 ```bash
 make install-docker
 ```
 
-5. Deploy/Update:
+6. Deploy/Update:
 ```bash
 make deploy
 ```
@@ -28,3 +34,9 @@ Notes:
 - Users are read from `vpn/users.json`.
 - TLS certs are auto-generated on the server to `~/vpn/cert`.
 - Secrets are loaded from `.env`; `make deploy` fails if missing.
+
+Passwords:
+```bash
+make passwords
+# prints: <username>: <sha256(username.SALT)>
+```
