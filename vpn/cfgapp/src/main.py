@@ -28,9 +28,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"Config Host: {settings.config_host}")
     logger.info(f"IPv4 Block Prefix: /{settings.ipv4_block_prefix}")
     logger.info(f"IPv6 Block Prefix: /{settings.ipv6_block_prefix}")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("CFG App shutting down...")
 
