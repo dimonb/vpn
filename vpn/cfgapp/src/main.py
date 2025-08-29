@@ -7,7 +7,7 @@ import httpx
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import Response
 from .config import settings
-from .processor import TemplateProcessor
+from .utils import IPProcessor, TemplateProcessor
 
 # Configure logging
 logging.basicConfig(
@@ -114,15 +114,16 @@ async def proxy_handler(request: Request, path: str):
         
         # Process template
         tpl_text = tpl_response.text
-        request_headers = dict(request.headers)
         
-        async with httpx.AsyncClient() as http_client:
-            processor = TemplateProcessor(http_client)
-            final_body = await processor.process_template(
-                tpl_text, 
-                url.hostname, 
-                request_headers
-            )
+        # Create IP processor and template processor
+        ip_processor = IPProcessor(
+            ipv4_block_prefix=settings.ipv4_block_prefix,
+            ipv6_block_prefix=settings.ipv6_block_prefix
+        )
+        template_processor = TemplateProcessor(ip_processor)
+        
+        # Process the template
+        final_body = await template_processor.process_template(tpl_text)
         
         return Response(
             content=final_body,

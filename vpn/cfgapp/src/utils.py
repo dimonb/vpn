@@ -90,7 +90,7 @@ class IPProcessor:
         """Convert IPv6 CIDR to list of target prefix blocks.
         
         This implements the same logic as the Cloudflare Worker's ipv6CidrToBlocks function.
-        It handles IPv6 aggregation with safety limits to prevent excessive output.
+        It handles IPv6 aggregation by flooring addresses to the target prefix.
         
         Args:
             cidr: IPv6 CIDR string (e.g., "2001:db8::/32")
@@ -107,47 +107,23 @@ class IPProcessor:
             network = ipaddress.IPv6Network(cidr, strict=False)
             
             # If the original network is already at or larger than target prefix
-            if network.prefixlen >= self.ipv6_block_prefix:
+            if network.prefixlen == self.ipv6_block_prefix:
                 return [f"{network.network_address}/{self.ipv6_block_prefix}"]
             
-            # Calculate the target prefix block that contains this network
-            target_network = ipaddress.IPv6Network(
-                f"{network.network_address}/{self.ipv6_block_prefix}", 
+            # Floor the starting address to the target prefix (same as Cloudflare Worker)
+            # Convert to integer, apply mask, convert back
+            addr_int = int(network.network_address)
+            mask = (1 << (128 - self.ipv6_block_prefix)) - 1
+            floored_addr_int = addr_int & ~mask
+            
+            # Create the floored network
+            floored_addr = ipaddress.IPv6Address(floored_addr_int)
+            floored_network = ipaddress.IPv6Network(
+                f"{floored_addr}/{self.ipv6_block_prefix}", 
                 strict=False
             )
             
-            # Check if the entire original network fits within this target block
-            if (network.network_address >= target_network.network_address and 
-                network.broadcast_address <= target_network.broadcast_address):
-                return [f"{target_network.network_address}/{self.ipv6_block_prefix}"]
-            
-            # Calculate how many target blocks we need
-            target_block_size = 2 ** (128 - self.ipv6_block_prefix)
-            original_size = network.num_addresses
-            num_blocks_needed = (original_size + target_block_size - 1) // target_block_size
-            
-            # Safety check: limit the number of blocks to prevent excessive output
-            if num_blocks_needed > 262144:  # Same limit as in Cloudflare Worker
-                return [
-                    f"{target_network.network_address}/{self.ipv6_block_prefix}",
-                    f"# WARNING: truncated {num_blocks_needed - 1} blocks for {cidr}"
-                ]
-            
-            # Generate all covering blocks
-            blocks = []
-            current_addr = network.network_address
-            
-            while current_addr <= network.broadcast_address:
-                block_network = ipaddress.IPv6Network(
-                    f"{current_addr}/{self.ipv6_block_prefix}", 
-                    strict=False
-                )
-                blocks.append(f"{block_network.network_address}/{self.ipv6_block_prefix}")
-                
-                # Move to next block
-                current_addr = block_network.broadcast_address + 1
-            
-            return blocks
+            return [f"{floored_network.network_address}/{self.ipv6_block_prefix}"]
             
         except ipaddress.AddressValueError as e:
             raise ValueError(f"Invalid IPv6 CIDR: {cidr}") from e
