@@ -1,5 +1,9 @@
 ## VPN Deploy — Quick Start
 
+Requirements:
+- Local: make, ansible, ssh, jq, sha256sum (coreutils) or shasum, qrencode (optional for `make cn`)
+- Remote: Linux host with SSH access (Docker/Compose installed via `make install-docker`)
+
 1. Clone repo and enter dir.
 
 2. Copy env and set secrets:
