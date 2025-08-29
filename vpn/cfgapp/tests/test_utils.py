@@ -6,12 +6,12 @@ import pytest
 
 from src.utils import (
     IPProcessor,
-    TemplateProcessor,
     dedupe_lines,
     ipv4_cover_blocks,
     ipv6_cidr_to_blocks,
     netset_expand,
 )
+from src.processor import TemplateProcessor
 
 
 class TestIPProcessor:
@@ -112,146 +112,7 @@ class TestIPProcessor:
         assert result == ["b", "a", "c"]
 
 
-class TestTemplateProcessor:
-    """Test TemplateProcessor class."""
 
-    def test_parse_template_no_rulesets(self) -> None:
-        """Test template parsing with no RULE-SET entries."""
-        ip_processor = IPProcessor()
-        processor = TemplateProcessor(ip_processor)
-        text = "DOMAIN,example.com,PROXY\nDOMAIN-SUFFIX,test.com,DIRECT"
-        result = processor.parse_template(text)
-        assert result["tasks"] == []
-        assert result["original_line_count"] == 2
-        assert result["passthrough"][0] == "DOMAIN,example.com,PROXY"
-        assert result["passthrough"][1] == "DOMAIN-SUFFIX,test.com,DIRECT"
-
-    def test_parse_template_with_rulesets(self) -> None:
-        """Test template parsing with RULE-SET entries."""
-        ip_processor = IPProcessor()
-        processor = TemplateProcessor(ip_processor)
-        text = """
-DOMAIN,example.com,PROXY
-RULE-SET,https://example.com/rules.txt,PROXY,no-resolve
-DOMAIN-SUFFIX,test.com,DIRECT
-"""
-        result = processor.parse_template(text)
-        assert len(result["tasks"]) == 1
-        assert result["tasks"][0]["url"] == "https://example.com/rules.txt"
-        assert result["tasks"][0]["suffix"] == ",PROXY,no-resolve"
-        assert result["original_line_count"] == 5  # Including empty lines
-
-    @pytest.mark.asyncio
-    async def test_expand_netset_success(self) -> None:
-        """Test NETSET expansion with successful fetch."""
-        ip_processor = IPProcessor(ipv4_block_prefix=18)
-        processor = TemplateProcessor(ip_processor)
-
-        # Create a mock response that behaves like aiohttp.ClientResponse
-        mock_response = AsyncMock()
-        mock_response.ok = True
-        mock_response.text = AsyncMock(return_value="192.168.1.0/24")
-
-        # Create a mock session that returns the mock response
-        mock_session = AsyncMock()
-        mock_session.get = AsyncMock(return_value=mock_response)
-
-        result = await processor.expand_netset(
-            "https://example.com/netset.txt", ",PROXY,no-resolve", mock_session
-        )
-        assert result == ["IP-CIDR,192.168.0.0/18,PROXY,no-resolve"]
-
-    @pytest.mark.asyncio
-    async def test_expand_netset_failure(self) -> None:
-        """Test NETSET expansion with failed fetch."""
-        ip_processor = IPProcessor()
-        processor = TemplateProcessor(ip_processor)
-
-        mock_response = AsyncMock()
-        mock_response.ok = False
-        mock_response.status = 404
-
-        mock_session = AsyncMock()
-        mock_session.get = AsyncMock(return_value=mock_response)
-
-        result = await processor.expand_netset(
-            "https://example.com/netset.txt", ",PROXY,no-resolve", mock_session
-        )
-        assert result == ["# NETSET fetch failed: https://example.com/netset.txt (404)"]
-
-    @pytest.mark.asyncio
-    async def test_expand_rule_set_with_netsets(self) -> None:
-        """Test RULE-SET expansion with NETSET entries."""
-        ip_processor = IPProcessor(ipv4_block_prefix=18)
-        processor = TemplateProcessor(ip_processor)
-
-        mock_response = AsyncMock()
-        mock_response.ok = True
-        mock_response.text = AsyncMock(return_value="#NETSET https://example.com/netset.txt")
-
-        mock_netset_response = AsyncMock()
-        mock_netset_response.ok = True
-        mock_netset_response.text = AsyncMock(return_value="192.168.1.0/24")
-
-        mock_session = AsyncMock()
-        mock_session.get = AsyncMock(side_effect=[mock_response, mock_netset_response])
-
-        task = {"url": "https://example.com/rules.txt", "suffix": ",PROXY,no-resolve"}
-        result = await processor.expand_rule_set(task, mock_session)
-
-        assert result[0] == "# RULE-SET,https://example.com/rules.txt"
-        assert "IP-CIDR,192.168.0.0/18,PROXY,no-resolve" in result
-
-    @pytest.mark.asyncio
-    async def test_expand_rule_set_regular_rules(self) -> None:
-        """Test RULE-SET expansion with regular rules."""
-        ip_processor = IPProcessor()
-        processor = TemplateProcessor(ip_processor)
-
-        mock_response = AsyncMock()
-        mock_response.ok = True
-        mock_response.text = AsyncMock(return_value="""
-DOMAIN,example.com,PROXY
-DOMAIN-SUFFIX,test.com,DIRECT
-""")
-
-        mock_session = AsyncMock()
-        mock_session.get = AsyncMock(return_value=mock_response)
-
-        task = {"url": "https://example.com/rules.txt", "suffix": ",PROXY,no-resolve"}
-        result = await processor.expand_rule_set(task, mock_session)
-
-        assert result[0] == "# RULE-SET,https://example.com/rules.txt"
-        assert "DOMAIN,example.com,PROXY,no-resolve" in result
-        assert "DOMAIN-SUFFIX,test.com,PROXY,no-resolve" in result
-
-    @pytest.mark.asyncio
-    async def test_process_template(self) -> None:
-        """Test full template processing."""
-        ip_processor = IPProcessor(ipv4_block_prefix=18)
-        processor = TemplateProcessor(ip_processor)
-
-        template_text = """
-DOMAIN,example.com,PROXY
-RULE-SET,https://example.com/rules.txt,PROXY,no-resolve
-DOMAIN-SUFFIX,test.com,DIRECT
-"""
-
-        # Mock the RULE-SET response
-        mock_response = AsyncMock()
-        mock_response.ok = True
-        mock_response.text = AsyncMock(return_value="192.168.1.0/24")
-
-        with patch("aiohttp.ClientSession") as mock_session_class:
-            mock_session = AsyncMock()
-            mock_session.get = AsyncMock(return_value=mock_response)
-            mock_session_class.return_value.__aenter__.return_value = mock_session
-
-            result = await processor.process_template(template_text)
-
-            assert "DOMAIN,example.com,PROXY" in result
-            assert "192.168.1.0/24,PROXY,no-resolve" in result
-            assert "DOMAIN-SUFFIX,test.com,DIRECT" in result
 
 
 class TestConvenienceFunctions:

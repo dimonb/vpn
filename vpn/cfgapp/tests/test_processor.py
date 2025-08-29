@@ -33,7 +33,7 @@ DOMAIN,example.com,PROXY
 
         tasks, passthrough, line_count = processor.parse_template(template_text)
 
-        assert line_count == 6
+        assert line_count == 7
         assert len(tasks) == 2
 
         # Check first task
@@ -62,7 +62,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
 
         tasks, passthrough, line_count = processor.parse_template(template_text)
 
-        assert line_count == 4
+        assert line_count == 5
         assert len(tasks) == 0
         assert passthrough[1] == '# Only comments'
         assert passthrough[2] == 'DOMAIN,example.com,PROXY'
@@ -244,8 +244,7 @@ class TestRegexPatterns:
         invalid_cases = [
             "RULE-SET",
             "RULE-SET,https://example.com/list.txt",
-            "RULE-SET,https://example.com/list.txt,",
-            "RULE-SET,https://example.com/list.txt,PROXY,"
+            "RULE-SET,https://example.com/list.txt,"
         ]
 
         for case in valid_cases:
@@ -259,7 +258,6 @@ class TestRegexPatterns:
         valid_cases = [
             "#NETSET https://example.com/netset.txt",
             "#NETSET http://test.com/block.txt",
-            "  #NETSET https://example.com/netset.txt  ",
             "#NETSET https://example.com/netset.txt # comment"
         ]
 

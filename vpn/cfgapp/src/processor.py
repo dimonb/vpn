@@ -138,8 +138,11 @@ class TemplateProcessor:
             print(f"List fetch failed: {url} -> {str(e)}")
             return [f"# RULE-SET fetch failed: {url}"]
 
-    async def process_template(self, tpl_text: str, incoming_host: str, request_headers: dict) -> str:
+    async def process_template(self, tpl_text: str, incoming_host: str = "", request_headers: dict = None) -> str:
         """Process template: run all RULE-SET expands in parallel and merge."""
+        if request_headers is None:
+            request_headers = {}
+            
         tasks, passthrough, original_line_count = self.parse_template(tpl_text)
         print(f"Template parsed: {original_line_count} lines, {len(tasks)} RULE-SET task(s)")
 
