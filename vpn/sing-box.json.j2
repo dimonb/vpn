@@ -1,0 +1,25 @@
+{% set users = lookup('file', 'users.json') | from_json %}
+{
+  "log": { "level": "info" },
+  "inbounds": [
+    {
+      "type": "hysteria2",
+      "tag": "hysteria2-in",
+      "listen": "0.0.0.0",
+      "listen_port": 47012,
+      "users": [{% for user in users %}{ "name": "{{ user }}", "password": "{{ (user + '.' + salt) | hash('sha256') }}" }{% if not loop.last %},{% endif %}{% endfor %}],
+      "obfs": {
+        "type": "salamander",
+        "password": "{{ obfs_password }}"
+      },
+      "ignore_client_bandwidth": true,
+      "tls": {
+        "enabled": true,
+        "alpn": ["h3"],
+        "certificate_path": "/etc/xray/certs/cert.pem",
+        "key_path": "/etc/xray/certs/key.pem"
+      }
+    }
+  ],
+  "outbounds": [{ "type": "direct" }]
+}

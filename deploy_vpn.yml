@@ -1,0 +1,48 @@
+---
+- name: Deploy and run Docker Compose on multiple servers
+  hosts: vpn
+  become: true
+  vars:
+    config_directory: /root/vpn
+
+  tasks:
+    - name: Ensure the configuration directory exists
+      ansible.builtin.file:
+        path: "{{ config_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Ensure the cert directory exists
+      ansible.builtin.file:
+        path: "{{ config_directory }}/cert"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+
+    - name: Generate self-signed certificate
+      ansible.builtin.shell:
+        cmd: openssl req -x509 -newkey rsa:4096 -keyout {{ config_directory }}/cert/key.pem -out {{ config_directory }}/cert/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+      args:
+        creates: "{{ config_directory }}/cert/cert.pem"
+
+    - name: Deploy configuration files using templates
+      ansible.builtin.template:
+        src: "vpn/{{ item.src }}"
+        dest: "{{ config_directory }}/{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "{{ item.mode }}"
+      loop:
+        - { src: './users.json', dest: 'users.json', mode: '0644' }
+        - { src: './sing-box.json.j2', dest: 'sing-box.json', mode: '0644' }
+        - { src: './docker-compose.yml.j2', dest: 'docker-compose.yml', mode: '0644' }
+        - { src: './Caddyfile.j2', dest: 'Caddyfile', mode: '0644' }
+
+    - name: Run Docker Compose
+      ansible.builtin.shell:
+        chdir: "{{ config_directory }}"
+        cmd: docker compose down && docker compose up --pull always --remove-orphans --force-recreate -d 
+

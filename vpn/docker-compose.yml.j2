@@ -1,0 +1,18 @@
+
+services:
+  sing-box:
+    image: itdoginfo/sing-box:v1.11.4
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./sing-box.json:/etc/sing-box/config.json
+      - ./cert:/etc/xray/certs
+  proxy:
+    image: caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy:/data/
+
+
