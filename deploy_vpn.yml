@@ -26,7 +26,7 @@
 
     - name: Generate self-signed certificate
       ansible.builtin.shell:
-        cmd: openssl req -x509 -newkey rsa:4096 -keyout {{ config_directory }}/cert/key.pem -out {{ config_directory }}/cert/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+        cmd: openssl req -x509 -newkey rsa:4096 -keyout {{ config_directory }}/cert/key.pem -out {{ config_directory }}/cert/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=i.am.com"
       args:
         creates: "{{ config_directory }}/cert/cert.pem"
 

@@ -27,7 +27,7 @@ app = FastAPI(
 async def startup_event():
     """Initialize application on startup."""
     logger.info("CFG App starting up...")
-    logger.info(f"API Host: {settings.api_host}")
+    logger.info(f"Config Host: {settings.config_host}")
     logger.info(f"IPv4 Block Prefix: /{settings.ipv4_block_prefix}")
     logger.info(f"IPv6 Block Prefix: /{settings.ipv6_block_prefix}")
 
@@ -40,7 +40,7 @@ async def shutdown_event():
 
 async def forward_request(request: Request, path_with_search: str) -> httpx.Response:
     """Forward request to origin API."""
-    target = f"https://{settings.api_host}{path_with_search}"
+    target = f"https://{settings.config_host}{path_with_search}"
     logger.info(f"Forwarding to origin: {target}")
 
     # Prepare headers

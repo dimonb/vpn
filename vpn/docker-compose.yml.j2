@@ -23,7 +23,7 @@ services:
     ports:
       - "127.0.0.1:8003:8000"
     environment:
-      - API_HOST={{ config_host }}
+      - CONFIG_HOST={{ config_host }}
       - IPV4_BLOCK_PREFIX=18
       - IPV6_BLOCK_PREFIX=32
       - HOST=0.0.0.0

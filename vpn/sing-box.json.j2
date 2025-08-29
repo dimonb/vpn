@@ -7,7 +7,14 @@
       "tag": "hysteria2-in",
       "listen": "0.0.0.0",
       "listen_port": {{ hysteria2_port | default(47012) }},
-      "users": [{% for user in users %}{ "name": "{{ user }}", "password": "{{ (user + '.' + salt) | hash('sha256') }}" }{% if not loop.last %},{% endif %}{% endfor %}],
+      "users": [
+        {% for user in users %}
+            { "name": "{{ user }}", 
+              "password": "{{ (user + '.' + salt) | hash('sha256') }}"
+            }
+        {% if not loop.last %},{% endif %}
+        {% endfor %}
+      ],
       "obfs": {
         "type": "salamander",
         "password": "{{ obfs_password }}"

@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # API configuration
-    api_host: str = Field(env="API_HOST")
+    config_host: str = Field(env="CONFIG_HOST")
 
     # IP aggregation settings
     ipv4_block_prefix: int = Field(default=18, env="IPV4_BLOCK_PREFIX")
