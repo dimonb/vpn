@@ -16,7 +16,7 @@ from .proxy_config import ProxyConfig
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper()),
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -28,13 +28,13 @@ proxy_config: ProxyConfig | None = None
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown."""
     global proxy_config
-    
+
     # Startup
     logger.info("CFG App starting up...")
     logger.info(f"Config Host: {settings.config_host}")
     logger.info(f"IPv4 Block Prefix: /{settings.ipv4_block_prefix}")
     logger.info(f"IPv6 Block Prefix: /{settings.ipv6_block_prefix}")
-    
+
     # Initialize proxy config if path is provided
     if settings.proxy_config:
         try:
@@ -56,7 +56,7 @@ app = FastAPI(
     title="CFG App",
     description="Python application for proxy rule processing and NETSET expansion",
     version="0.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 
@@ -67,15 +67,11 @@ async def forward_request(request: Request, path_with_search: str) -> httpx.Resp
 
     # Prepare headers
     headers = dict(request.headers)
-    headers.pop('cookie', None)  # Remove cookies
-    headers.pop('host', None)    # Remove host header
+    headers.pop("cookie", None)  # Remove cookies
+    headers.pop("host", None)  # Remove host header
 
     async with httpx.AsyncClient() as client:
-        response = await client.get(
-            target,
-            headers=headers,
-            timeout=30.0
-        )
+        response = await client.get(target, headers=headers, timeout=30.0)
         return response
 
 
@@ -90,7 +86,7 @@ async def proxy_handler(request: Request, path: str):
     """Main proxy handler that mimics the Cloudflare Worker behavior."""
     try:
         url = request.url
-        path_with_params = url.path + ('?' + url.query if url.query else '')
+        path_with_params = url.path + ("?" + url.query if url.query else "")
 
         logger.info(f"Incoming: {url}")
 
@@ -104,14 +100,14 @@ async def proxy_handler(request: Request, path: str):
                 return Response(
                     content=response.content,
                     status_code=response.status_code,
-                    headers=dict(response.headers)
+                    headers=dict(response.headers),
                 )
         except Exception as e:
             logger.error(f"Forward request failed: {e}")
             raise HTTPException(status_code=500, detail="Forward request failed") from e
 
         # If we get here, origin returned 404, try template
-        tpl_path = url.path + ".tpl" + ('?' + url.query if url.query else '')
+        tpl_path = url.path + ".tpl" + ("?" + url.query if url.query else "")
         logger.info(f"404 -> try template: {tpl_path}")
 
         try:
@@ -122,7 +118,7 @@ async def proxy_handler(request: Request, path: str):
                 return Response(
                     content=response.content,
                     status_code=response.status_code,
-                    headers=dict(response.headers)
+                    headers=dict(response.headers),
                 )
         except Exception as e:
             logger.error(f"Template fetch failed: {e}")
@@ -130,7 +126,7 @@ async def proxy_handler(request: Request, path: str):
             return Response(
                 content=response.content,
                 status_code=response.status_code,
-                headers=dict(response.headers)
+                headers=dict(response.headers),
             )
 
         # Process template
@@ -141,7 +137,7 @@ async def proxy_handler(request: Request, path: str):
         logger.info(f"Template tags: {tags}")
 
         # Check authentication if AUTH tag is present
-        if 'AUTH' in tags:
+        if "AUTH" in tags:
             require_auth(request, proxy_config)
 
         # Create HTTP client for template processor
@@ -152,29 +148,25 @@ async def proxy_handler(request: Request, path: str):
             # Prepare headers with query string for proxy config
             request_headers = dict(request.headers)
             if url.query:
-                request_headers['x-query-string'] = url.query
+                request_headers["x-query-string"] = url.query
 
             # Process based on template type
-            if 'CLASH' in tags:
+            if "CLASH" in tags:
                 # Process as CLASH YAML
                 clash_processor = ClashProcessor(template_processor, proxy_config)
                 final_body = await clash_processor.process_clash_config(
-                    tpl_text,
-                    request.headers.get('host', ''),
-                    request_headers
+                    tpl_text, request.headers.get("host", ""), request_headers
                 )
             else:
                 # Process as regular template (SHADOWROCKET or default)
                 final_body = await template_processor.process_template(
-                    tpl_text,
-                    request.headers.get('host', ''),
-                    request_headers
+                    tpl_text, request.headers.get("host", ""), request_headers
                 )
 
             return Response(
                 content=final_body,
                 status_code=200,
-                headers={"content-type": "text/plain; charset=utf-8"}
+                headers={"content-type": "text/plain; charset=utf-8"},
             )
 
     except HTTPException:
@@ -185,15 +177,11 @@ async def proxy_handler(request: Request, path: str):
         return Response(
             content="Worker error",
             status_code=500,
-            headers={"content-type": "text/plain; charset=utf-8"}
+            headers={"content-type": "text/plain; charset=utf-8"},
         )
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "src.main:app",
-        host=settings.host,
-        port=settings.port,
-        reload=True
-    )
+
+    uvicorn.run("src.main:app", host=settings.host, port=settings.port, reload=True)

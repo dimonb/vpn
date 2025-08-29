@@ -2,7 +2,6 @@
 
 import hashlib
 from urllib.parse import parse_qs
-from typing import Optional
 
 from fastapi import HTTPException, Request
 
@@ -24,8 +23,8 @@ def verify_auth(request: Request, proxy_config=None) -> bool:
     """
     query_params = parse_qs(request.url.query)
 
-    username = query_params.get('u', [None])[0]
-    hash_param = query_params.get('hash', [None])[0]
+    username = query_params.get("u", [None])[0]
+    hash_param = query_params.get("hash", [None])[0]
 
     if not username or not hash_param:
         return False
@@ -68,12 +67,12 @@ def extract_template_tags(template_content: str) -> list[str]:
     Returns:
         List of tags found in the first line
     """
-    lines = template_content.strip().split('\n')
+    lines = template_content.strip().split("\n")
     if not lines:
         return []
 
     first_line = lines[0].strip()
-    if not first_line.startswith('#'):
+    if not first_line.startswith("#"):
         return []
 
     # Remove # and split by comma
@@ -81,6 +80,4 @@ def extract_template_tags(template_content: str) -> list[str]:
     if not tags_part:
         return []
 
-    return [tag.strip() for tag in tags_part.split(',') if tag.strip()]
-
-
+    return [tag.strip() for tag in tags_part.split(",") if tag.strip()]

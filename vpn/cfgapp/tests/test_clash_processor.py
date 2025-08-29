@@ -46,7 +46,7 @@ log-level: info
             "rules": [
                 "DOMAIN-SUFFIX,example.com,PROXY",
                 "RULE-SET,https://example.com/list.txt,PROXY",
-                "DOMAIN-SUFFIX,test.com,DIRECT"
+                "DOMAIN-SUFFIX,test.com,DIRECT",
             ]
         }
 
@@ -62,7 +62,9 @@ log-level: info
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_process_clash_config_no_rule_sets(self, clash_processor: ClashProcessor) -> None:
+    async def test_process_clash_config_no_rule_sets(
+        self, clash_processor: ClashProcessor
+    ) -> None:
         """Test processing CLASH config without RULE-SET entries."""
         yaml_content = """
 mixed-port: 7890
@@ -75,7 +77,9 @@ rules:
         assert "DOMAIN-SUFFIX,example.com,PROXY" in result
 
     @pytest.mark.asyncio
-    async def test_process_clash_config_with_rule_sets(self, clash_processor: ClashProcessor) -> None:
+    async def test_process_clash_config_with_rule_sets(
+        self, clash_processor: ClashProcessor
+    ) -> None:
         """Test processing CLASH config with RULE-SET entries."""
         # Mock the template processor to return expanded rules
         clash_processor.template_processor.process_template = AsyncMock(
@@ -94,5 +98,3 @@ rules:
         assert "DOMAIN-SUFFIX,test.com,PROXY" in result
         assert "RULE-SET,https://example.com/list.txt,PROXY" not in result
         assert "DOMAIN-SUFFIX,example.com,PROXY" in result
-
-

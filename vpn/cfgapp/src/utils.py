@@ -10,7 +10,9 @@ import re
 # Regular expressions for IP validation and parsing
 RE_IPV4_CIDR = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}\/(?:[0-9]|[12][0-9]|3[0-2])$")
 RE_IPV6_CIDR = re.compile(r"^([0-9a-f:]+:+)+\/\d{1,3}$", re.IGNORECASE)
-RULE_RE = re.compile(r"^\s*RULE-SET\s*,\s*([^,\s]+)\s*,\s*([^#]+?)\s*(?:#.*)?$", re.IGNORECASE)
+RULE_RE = re.compile(
+    r"^\s*RULE-SET\s*,\s*([^,\s]+)\s*,\s*([^#]+?)\s*(?:#.*)?$", re.IGNORECASE
+)
 NETSET_RE = re.compile(r"^#NETSET\s+(\S+)", re.IGNORECASE)
 
 
@@ -114,8 +116,7 @@ class IPProcessor:
             # Create the floored network
             floored_addr = ipaddress.IPv6Address(floored_addr_int)
             floored_network = ipaddress.IPv6Network(
-                f"{floored_addr}/{self.ipv6_block_prefix}",
-                strict=False
+                f"{floored_addr}/{self.ipv6_block_prefix}", strict=False
             )
 
             return [f"{floored_network.network_address}/{self.ipv6_block_prefix}"]
@@ -138,20 +139,20 @@ class IPProcessor:
         """
         out = []
 
-        for raw_line in text.split('\n'):
+        for raw_line in text.split("\n"):
             line = raw_line.strip()
-            if not line or line.startswith('#') or line.startswith(';'):
+            if not line or line.startswith("#") or line.startswith(";"):
                 continue
 
             # Remove "IP " prefix if present
-            line = re.sub(r'^IP\s+', '', line, flags=re.IGNORECASE)
+            line = re.sub(r"^IP\s+", "", line, flags=re.IGNORECASE)
 
             # Handle IPv6 CIDR
             if RE_IPV6_CIDR.match(line):
                 try:
                     blocks = self.ipv6_cidr_to_blocks(line)
                     for block in blocks:
-                        if block.startswith('#'):
+                        if block.startswith("#"):
                             out.append(block)
                         else:
                             out.append(f"IP-CIDR,{block}{suffix}")
@@ -191,9 +192,6 @@ class IPProcessor:
         return out
 
 
-
-
-
 # Convenience functions for backward compatibility
 def ipv4_cover_blocks(cidr: str, target_pfx: int = 18) -> list[str]:
     """Return list of covering IPv4 blocks with target prefix."""
@@ -213,7 +211,11 @@ def dedupe_lines(lines: list[str]) -> list[str]:
     return processor.dedupe_lines(lines)
 
 
-def netset_expand(text: str, suffix: str, ipv4_block_prefix: int = 18, ipv6_block_prefix: int = 32) -> list[str]:
+def netset_expand(
+    text: str, suffix: str, ipv4_block_prefix: int = 18, ipv6_block_prefix: int = 32
+) -> list[str]:
     """Expand raw .netset text into lines with IP aggregation."""
-    processor = IPProcessor(ipv4_block_prefix=ipv4_block_prefix, ipv6_block_prefix=ipv6_block_prefix)
+    processor = IPProcessor(
+        ipv4_block_prefix=ipv4_block_prefix, ipv6_block_prefix=ipv6_block_prefix
+    )
     return processor.netset_expand(text, suffix)

@@ -3,7 +3,7 @@
 import json
 import tempfile
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -15,29 +15,40 @@ class TestProxyConfig:
     """Test cases for ProxyConfig class."""
 
     @pytest.fixture
-    def sample_config(self) -> Dict[str, Any]:
+    def sample_config(self) -> dict[str, Any]:
         """Sample configuration for testing."""
         return {
             "users": ["dimonb", "diakon", "ivan", "petrov"],
             "subs": {
                 "default": {
-                    "DE_1_CONTABO": {"protocol": "hy2", "host": "de-1.contabo.v.dimonb.com"},
-                    "US_1_VULTR": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"}
+                    "DE_1_CONTABO": {
+                        "protocol": "hy2",
+                        "host": "de-1.contabo.v.dimonb.com",
+                    },
+                    "US_1_VULTR": {
+                        "protocol": "vmess",
+                        "host": "us-1.vultr.v.dimonb.com",
+                    },
                 },
                 "premium": {
-                    "SG_1_LINODE": {"protocol": "vless", "host": "sg-1.linode.v.dimonb.com"}
-                }
-            }
+                    "SG_1_LINODE": {
+                        "protocol": "vless",
+                        "host": "sg-1.linode.v.dimonb.com",
+                    }
+                },
+            },
         }
 
     @pytest.fixture
-    def config_file(self, sample_config: Dict[str, Any]) -> Path:
+    def config_file(self, sample_config: dict[str, Any]) -> Path:
         """Create temporary config file for testing."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(sample_config, f)
             return Path(f.name)
 
-    def test_load_config_success(self, config_file: Path, sample_config: Dict[str, Any]) -> None:
+    def test_load_config_success(
+        self, config_file: Path, sample_config: dict[str, Any]
+    ) -> None:
         """Test successful config loading."""
         proxy_config = ProxyConfig(str(config_file))
         assert proxy_config.config_data == sample_config
@@ -49,7 +60,7 @@ class TestProxyConfig:
 
     def test_load_config_invalid_json(self) -> None:
         """Test config loading with invalid JSON."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             f.write("invalid json content")
             config_path = Path(f.name)
 
@@ -102,10 +113,10 @@ class TestProxyConfig:
         """Test proxy configuration generation for default subscription."""
         proxy_config = ProxyConfig(str(config_file))
         configs = proxy_config.generate_proxy_configs()
-        
+
         # Should generate configs for 2 proxies (one per proxy, not per user)
         assert len(configs) == 2
-        
+
         # Check that all configs have required fields
         for config in configs:
             assert "name" in config
@@ -117,17 +128,19 @@ class TestProxyConfig:
         """Test proxy configuration generation for premium subscription."""
         proxy_config = ProxyConfig(str(config_file))
         configs = proxy_config.generate_proxy_configs("premium")
-        
+
         # Should generate configs for 1 proxy (one per proxy, not per user)
         assert len(configs) == 1
-        
+
         # Check that all configs are VLESS
         for config in configs:
             assert config["type"] == "vless"
             assert "sg_1_linode" in config["name"]
 
-    @patch('src.proxy_config.settings')
-    def test_generate_hysteria2_config_with_password(self, mock_settings, config_file: Path) -> None:
+    @patch("src.proxy_config.settings")
+    def test_generate_hysteria2_config_with_password(
+        self, mock_settings, config_file: Path
+    ) -> None:
         """Test Hysteria2 configuration generation with provided password."""
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_port = 47012
@@ -135,7 +148,7 @@ class TestProxyConfig:
         config = proxy_config._generate_hysteria2_config(
             "test.host.com", "TEST_PROXY", "custom-password-123"
         )
-        
+
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
@@ -149,16 +162,16 @@ class TestProxyConfig:
         assert config["up"] == 50
         assert config["down"] == 200
 
-    @patch('src.proxy_config.settings')
-    def test_generate_hysteria2_config_without_password(self, mock_settings, config_file: Path) -> None:
+    @patch("src.proxy_config.settings")
+    def test_generate_hysteria2_config_without_password(
+        self, mock_settings, config_file: Path
+    ) -> None:
         """Test Hysteria2 configuration generation without provided password."""
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_port = 47012
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_hysteria2_config(
-            "test.host.com", "TEST_PROXY"
-        )
-        
+        config = proxy_config._generate_hysteria2_config("test.host.com", "TEST_PROXY")
+
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
@@ -176,10 +189,8 @@ class TestProxyConfig:
     def test_generate_vmess_config(self, config_file: Path) -> None:
         """Test VMess configuration generation."""
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_vmess_config(
-            "test.host.com", "TEST_PROXY"
-        )
-        
+        config = proxy_config._generate_vmess_config("test.host.com", "TEST_PROXY")
+
         assert config["type"] == "vmess"
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
@@ -191,10 +202,8 @@ class TestProxyConfig:
     def test_generate_vless_config(self, config_file: Path) -> None:
         """Test VLESS configuration generation."""
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_vless_config(
-            "test.host.com", "TEST_PROXY"
-        )
-        
+        config = proxy_config._generate_vless_config("test.host.com", "TEST_PROXY")
+
         assert config["type"] == "vless"
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
@@ -207,45 +216,43 @@ class TestProxyConfig:
         """Test getting proxy list for default subscription."""
         proxy_config = ProxyConfig(str(config_file))
         proxy_list = proxy_config.get_proxy_list()
-        
+
         # Should have 2 proxy names (one per proxy, not per user)
         assert len(proxy_list) == 2
-        
+
         # Check that names follow expected pattern
-        expected_names = [
-            "de_1_contabo", "us_1_vultr"
-        ]
+        expected_names = ["de_1_contabo", "us_1_vultr"]
         assert set(proxy_list) == set(expected_names)
 
     def test_get_proxy_list_premium(self, config_file: Path) -> None:
         """Test getting proxy list for premium subscription."""
         proxy_config = ProxyConfig(str(config_file))
         proxy_list = proxy_config.get_proxy_list("premium")
-        
+
         # Should have 1 proxy name (one per proxy, not per user)
         assert len(proxy_list) == 1
-        
+
         # Check that names follow expected pattern
-        expected_names = [
-            "sg_1_linode"
-        ]
+        expected_names = ["sg_1_linode"]
         assert set(proxy_list) == set(expected_names)
 
     def test_unsupported_protocol(self, config_file: Path) -> None:
         """Test handling of unsupported protocols."""
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_proxy_config("unsupported", "test.host.com", "TEST")
+        config = proxy_config._generate_proxy_config(
+            "unsupported", "test.host.com", "TEST"
+        )
         assert config == {}
 
     def test_password_generation_consistency(self, config_file: Path) -> None:
         """Test that password generation is consistent."""
         proxy_config = ProxyConfig(str(config_file))
-        
+
         # Same input should produce same output
         password1 = proxy_config._generate_password("proxy1")
         password2 = proxy_config._generate_password("proxy1")
         assert password1 == password2
-        
+
         # Different input should produce different output
         password3 = proxy_config._generate_password("proxy2")
         assert password1 != password3
@@ -253,7 +260,7 @@ class TestProxyConfig:
     def test_port_generation_range(self, config_file: Path) -> None:
         """Test that port generation is within expected range."""
         proxy_config = ProxyConfig(str(config_file))
-        
+
         for _ in range(100):
             port = proxy_config._generate_port("testproxy")
             assert 40000 <= port <= 49999
@@ -261,9 +268,9 @@ class TestProxyConfig:
     def test_uuid_generation_format(self, config_file: Path) -> None:
         """Test that UUID generation produces valid UUID format."""
         import uuid
-        
+
         proxy_config = ProxyConfig(str(config_file))
-        
+
         for _ in range(10):
             generated_uuid = proxy_config._generate_uuid("testproxy")
             # Should be valid UUID format

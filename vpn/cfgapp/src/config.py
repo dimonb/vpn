@@ -31,10 +31,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=False,
-        env_prefix="",
-        extra="ignore"
+        env_file=".env", case_sensitive=False, env_prefix="", extra="ignore"
     )
 
 
