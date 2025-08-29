@@ -58,6 +58,12 @@ async def forward_request(request: Request, path_with_search: str) -> httpx.Resp
         return response
 
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "version": "0.1.0"}
+
+
 @app.get("/{path:path}")
 async def proxy_handler(request: Request, path: str):
     """Main proxy handler that mimics the Cloudflare Worker behavior."""
@@ -131,12 +137,6 @@ async def proxy_handler(request: Request, path: str):
             status_code=500,
             headers={"content-type": "text/plain; charset=utf-8"}
         )
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "version": "0.1.0"}
 
 
 if __name__ == "__main__":
