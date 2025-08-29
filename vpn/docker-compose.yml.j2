@@ -27,6 +27,8 @@ services:
       - CONFIG_HOST={{ config_host }}
       - PROXY_CONFIG=/config.json
       - OBFS_PASSWORD={{ obfs_password }}
+      - HYSTERIA2_PORT={{ hysteria2_port }}
+      - SALT={{ salt }}
       - IPV4_BLOCK_PREFIX=18
       - IPV6_BLOCK_PREFIX=32
       - HOST=0.0.0.0
