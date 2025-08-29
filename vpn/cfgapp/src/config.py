@@ -1,34 +1,36 @@
 """Configuration settings for the CFG application."""
 
-
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     # API configuration
-    config_host: str = Field(default="", env="CONFIG_HOST")
-    api_host: str = Field(default="", env="API_HOST")
+    config_host: str = Field(default="")
+    api_host: str = Field(default="")
 
     # Authentication
-    salt: str = Field(default="", env="SALT")
+    salt: str = Field(default="")
 
     # IP aggregation settings
-    ipv4_block_prefix: int = Field(default=18, env="IPV4_BLOCK_PREFIX")
-    ipv6_block_prefix: int = Field(default=32, env="IPV6_BLOCK_PREFIX")
+    ipv4_block_prefix: int = Field(default=18)
+    ipv6_block_prefix: int = Field(default=32)
 
     # Server configuration
-    host: str = Field(default="0.0.0.0", env="HOST")
-    port: int = Field(default=8000, env="PORT")
+    host: str = Field(default="0.0.0.0")
+    port: int = Field(default=8000)
 
     # Logging
-    log_level: str = Field(default="INFO", env="LOG_LEVEL")
+    log_level: str = Field(default="INFO")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        env_prefix="",
+        extra="ignore"
+    )
 
 
 # Global settings instance

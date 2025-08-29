@@ -1,7 +1,6 @@
 """CLASH YAML configuration processor."""
 
-import re
-from typing import Any, Dict, List
+from typing import Any
 
 import yaml
 
@@ -13,34 +12,34 @@ class ClashProcessor:
 
     def __init__(self, template_processor: TemplateProcessor):
         """Initialize CLASH processor.
-        
+
         Args:
             template_processor: TemplateProcessor instance for RULE-SET expansion
         """
         self.template_processor = template_processor
 
-    def parse_clash_yaml(self, yaml_content: str) -> Dict[str, Any]:
+    def parse_clash_yaml(self, yaml_content: str) -> dict[str, Any]:
         """Parse CLASH YAML content.
-        
+
         Args:
             yaml_content: Raw YAML content as string
-            
+
         Returns:
             Parsed YAML as dictionary
         """
         return yaml.safe_load(yaml_content)
 
-    def extract_rule_sets(self, clash_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def extract_rule_sets(self, clash_config: dict[str, Any]) -> list[dict[str, Any]]:
         """Extract RULE-SET entries from CLASH configuration.
-        
+
         Args:
             clash_config: Parsed CLASH configuration
-            
+
         Returns:
             List of RULE-SET entries with their context
         """
         rule_sets = []
-        
+
         # Look for RULE-SET entries in rules section
         rules = clash_config.get('rules', [])
         for i, rule in enumerate(rules):
@@ -56,85 +55,85 @@ class ClashProcessor:
                         'proxy_group': proxy_group,
                         'original_rule': rule
                     })
-        
+
         return rule_sets
 
-    async def expand_rule_sets(self, rule_sets: List[Dict[str, Any]], 
-                              incoming_host: str, request_headers: dict) -> List[str]:
+    async def expand_rule_sets(self, rule_sets: list[dict[str, Any]],
+                              incoming_host: str, request_headers: dict) -> list[str]:
         """Expand RULE-SET entries using the template processor.
-        
+
         Args:
             rule_sets: List of RULE-SET entries
             incoming_host: Incoming request host
             request_headers: Request headers
-            
+
         Returns:
             List of expanded rules
         """
         expanded_rules = []
-        
+
         for rule_set in rule_sets:
             url = rule_set['url']
             proxy_group = rule_set['proxy_group']
-            
+
             # Create a temporary template with just this RULE-SET
             temp_template = f"RULE-SET,{url},{proxy_group}"
-            
+
             # Use template processor to expand it
             expanded = await self.template_processor.process_template(
                 temp_template, incoming_host, request_headers
             )
-            
+
             # Add expanded rules (skip the first line which is the comment)
             lines = expanded.split('\n')
             if lines and lines[0].startswith('# RULE-SET'):
                 expanded_rules.extend(lines[1:])
             else:
                 expanded_rules.extend(lines)
-        
+
         return expanded_rules
 
-    async def process_clash_config(self, yaml_content: str, 
+    async def process_clash_config(self, yaml_content: str,
                                  incoming_host: str, request_headers: dict) -> str:
         """Process CLASH YAML configuration and expand RULE-SET entries.
-        
+
         Args:
             yaml_content: Raw YAML content
             incoming_host: Incoming request host
             request_headers: Request headers
-            
+
         Returns:
             Processed YAML content with expanded RULE-SET entries
         """
         # Parse YAML
         clash_config = self.parse_clash_yaml(yaml_content)
-        
+
         # Extract RULE-SET entries
         rule_sets = self.extract_rule_sets(clash_config)
-        
+
         if not rule_sets:
             # No RULE-SET entries found, return original content
             return yaml_content
-        
+
         # Expand RULE-SET entries
         expanded_rules = await self.expand_rule_sets(rule_sets, incoming_host, request_headers)
-        
+
         # Replace RULE-SET entries with expanded rules
         rules = clash_config.get('rules', [])
         new_rules = []
-        
+
         for rule in rules:
             if isinstance(rule, str) and rule.startswith('RULE-SET,'):
                 # Skip RULE-SET entries as they will be replaced
                 continue
             new_rules.append(rule)
-        
+
         # Add expanded rules
         new_rules.extend(expanded_rules)
-        
+
         # Update configuration
         clash_config['rules'] = new_rules
-        
+
         # Convert back to YAML
         return yaml.dump(clash_config, default_flow_style=False, allow_unicode=True)
 

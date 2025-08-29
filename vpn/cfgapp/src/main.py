@@ -6,7 +6,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import Response
 
-from .auth import extract_template_tags, require_auth, verify_auth
+from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
 from .processor import TemplateProcessor
@@ -137,15 +137,15 @@ async def proxy_handler(request: Request, path: str):
             # Process as CLASH YAML
             clash_processor = ClashProcessor(template_processor)
             final_body = await clash_processor.process_clash_config(
-                tpl_text, 
-                request.headers.get('host', ''), 
+                tpl_text,
+                request.headers.get('host', ''),
                 dict(request.headers)
             )
         else:
             # Process as regular template (SHADOWROCKET or default)
             final_body = await template_processor.process_template(
-                tpl_text, 
-                request.headers.get('host', ''), 
+                tpl_text,
+                request.headers.get('host', ''),
                 dict(request.headers)
             )
 

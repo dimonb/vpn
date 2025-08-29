@@ -1,6 +1,5 @@
 """Tests for authentication module."""
 
-import hashlib
 from unittest.mock import Mock
 
 import pytest
@@ -45,7 +44,7 @@ class TestAuth:
         """Test auth verification with missing parameters."""
         request = Mock()
         request.url.query = ""
-        
+
         result = verify_auth(request)
         assert result is False
 
@@ -53,7 +52,7 @@ class TestAuth:
         """Test auth verification with invalid hash."""
         request = Mock()
         request.url.query = "u=testuser&hash=invalidhash"
-        
+
         result = verify_auth(request)
         assert result is False
 
@@ -61,10 +60,10 @@ class TestAuth:
         """Test require_auth raises exception on failure."""
         request = Mock()
         request.url.query = ""
-        
+
         with pytest.raises(HTTPException) as exc_info:
             require_auth(request)
-        
+
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail == "Authentication required"
 

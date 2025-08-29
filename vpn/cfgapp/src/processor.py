@@ -142,7 +142,6 @@ class TemplateProcessor:
         """Process template: run all RULE-SET expands in parallel and merge."""
         if request_headers is None:
             request_headers = {}
-            
         tasks, passthrough, original_line_count = self.parse_template(tpl_text)
         print(f"Template parsed: {original_line_count} lines, {len(tasks)} RULE-SET task(s)")
 

@@ -1,9 +1,8 @@
 """Tests for CLASH processor module."""
 
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
-import yaml
 
 from src.clash_processor import ClashProcessor
 from src.processor import TemplateProcessor
@@ -50,7 +49,7 @@ log-level: info
                 "DOMAIN-SUFFIX,test.com,DIRECT"
             ]
         }
-        
+
         result = clash_processor.extract_rule_sets(clash_config)
         assert len(result) == 1
         assert result[0]["url"] == "https://example.com/list.txt"
@@ -82,7 +81,7 @@ rules:
         clash_processor.template_processor.process_template = AsyncMock(
             return_value="# RULE-SET,https://example.com/list.txt\nDOMAIN-SUFFIX,test.com,PROXY"
         )
-        
+
         yaml_content = """
 mixed-port: 7890
 rules:
@@ -90,7 +89,7 @@ rules:
   - DOMAIN-SUFFIX,example.com,PROXY
 """
         result = await clash_processor.process_clash_config(yaml_content, "", {})
-        
+
         # Should contain the expanded rule but not the original RULE-SET
         assert "DOMAIN-SUFFIX,test.com,PROXY" in result
         assert "RULE-SET,https://example.com/list.txt,PROXY" not in result

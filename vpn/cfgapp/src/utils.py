@@ -4,12 +4,8 @@ This module implements the logic from Cloudflare Worker v4 for processing
 RULE-SET templates and expanding NETSET entries with IP aggregation.
 """
 
-import asyncio
 import ipaddress
 import re
-from typing import Any
-
-import aiohttp
 
 # Regular expressions for IP validation and parsing
 RE_IPV4_CIDR = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}\/(?:[0-9]|[12][0-9]|3[0-2])$")

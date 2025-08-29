@@ -1,9 +1,5 @@
 """Tests for utils module."""
 
-from unittest.mock import AsyncMock, patch
-
-import pytest
-
 from src.utils import (
     IPProcessor,
     dedupe_lines,
@@ -11,7 +7,6 @@ from src.utils import (
     ipv6_cidr_to_blocks,
     netset_expand,
 )
-from src.processor import TemplateProcessor
 
 
 class TestIPProcessor:
@@ -107,16 +102,13 @@ class TestIPProcessor:
     def test_dedupe_lines_preserves_order(self) -> None:
         """Test line deduplication preserves order."""
         processor = IPProcessor()
-        lines = ["b", "a", "c", "a", "b"]
+        lines = ["c", "a", "b", "a", "c"]
         result = processor.dedupe_lines(lines)
-        assert result == ["b", "a", "c"]
-
-
-
+        assert result == ["c", "a", "b"]
 
 
 class TestConvenienceFunctions:
-    """Test convenience functions for backward compatibility."""
+    """Test convenience functions."""
 
     def test_ipv4_cover_blocks_function(self) -> None:
         """Test ipv4_cover_blocks convenience function."""
@@ -137,6 +129,6 @@ class TestConvenienceFunctions:
     def test_netset_expand_function(self) -> None:
         """Test netset_expand convenience function."""
         text = "192.168.1.0/24"
-        suffix = ",PROXY,no-resolve"
-        result = netset_expand(text, suffix, 18, 32)
-        assert result == ["IP-CIDR,192.168.0.0/18,PROXY,no-resolve"]
+        suffix = ",PROXY"
+        result = netset_expand(text, suffix, 18)
+        assert result == ["IP-CIDR,192.168.0.0/18,PROXY"]
