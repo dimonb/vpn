@@ -36,6 +36,7 @@ PORT=8000
 # Proxy Configuration
 PROXY_CONFIG=/path/to/proxy_config.json
 OBFS_PASSWORD=your-obfs-password-here
+HYSTERIA2_PORT=47012
 
 # Logging
 LOG_LEVEL=INFO
@@ -80,6 +81,11 @@ The `PROXY_CONFIG` environment variable should point to a JSON file with the fol
 #### Proxy Generation Logic
 
 The system generates **one proxy configuration per proxy entry** in the subscription, not per user. Users are used for generating unique parameters (passwords, ports, UUIDs) but the final configuration contains one proxy per subscription entry.
+
+#### Environment Variables for Proxy Configuration
+
+- **OBFS_PASSWORD**: Password for obfs (obfuscation) in Hysteria2 protocol
+- **HYSTERIA2_PORT**: Fixed port number for Hysteria2 proxies (default: 47012)
 
 ## Clash Configuration
 
@@ -154,7 +160,7 @@ The system generates proxy configurations with the following structure:
 - name: de_1_contabo
   type: hysteria2
   server: de-1.contabo.v.dimonb.com
-  port: 41628
+  port: 47012
   password: bd827d918fab8f0baab41e8f785c52203f829f45f8e9de3467ba97d9e09bdff8
   sni: i.am.com
   skip-cert-verify: true
