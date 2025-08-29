@@ -77,6 +77,10 @@ The `PROXY_CONFIG` environment variable should point to a JSON file with the fol
 - **Custom**: Use query parameter `?sub=premium` to select specific subscription
 - **Fallback**: If specified subscription doesn't exist, falls back to `default`
 
+#### Proxy Generation Logic
+
+The system generates **one proxy configuration per proxy entry** in the subscription, not per user. Users are used for generating unique parameters (passwords, ports, UUIDs) but the final configuration contains one proxy per subscription entry.
+
 ## Clash Configuration
 
 The app supports Clash YAML templates with special placeholders:
@@ -147,11 +151,11 @@ The system generates proxy configurations with the following structure:
 
 #### Hysteria2
 ```yaml
-- name: de_1_contabo-dimonb
+- name: de_1_contabo
   type: hysteria2
   server: de-1.contabo.v.dimonb.com
-  port: 44538
-  password: 00629f20c4bd20b24d4d41674a0eb6639e0ac1b0f2f830102067108bdcbb1433
+  port: 41628
+  password: bd827d918fab8f0baab41e8f785c52203f829f45f8e9de3467ba97d9e09bdff8
   sni: i.am.com
   skip-cert-verify: true
   alpn: ["h3"]
@@ -165,7 +169,7 @@ The system generates proxy configurations with the following structure:
 
 #### VMess
 ```yaml
-- name: us_1_vultr-dimonb
+- name: us_1_vultr
   type: vmess
   server: us-1.vultr.v.dimonb.com
   port: 47970
