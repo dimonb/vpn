@@ -1,14 +1,16 @@
 # VPN Deploy — Automated VPN Server Deployment
 
-A complete solution for deploying VPN servers using Ansible, Docker, and Sing-Box with automatic TLS certificate management via Caddy.
+A complete solution for deploying VPN servers using Ansible, Docker, and Sing-Box with automatic TLS certificate management via Caddy. Includes a Python-based configuration application for proxy rule processing and subscription management.
 
 ## 🚀 Features
 
 - **Automated Deployment**: One-command deployment using Ansible
 - **Docker-based**: Containerized VPN services for easy management
 - **TLS Certificates**: Automatic HTTPS certificate generation with Caddy
-- **User Management**: Simple JSON-based user configuration
-- **Password Generation**: Secure password hashing with salt
+- **User Management**: JSON-based user configuration with secure password generation
+- **Subscription System**: Multi-tier subscription management with proxy configuration
+- **CFG App**: Python application for proxy rule processing and NETSET expansion
+- **Template Processing**: Support for Clash, Shadowrocket, and custom templates
 - **QR Code Generation**: Easy client configuration sharing
 
 ## 📋 Requirements
@@ -20,6 +22,7 @@ A complete solution for deploying VPN servers using Ansible, Docker, and Sing-Bo
 - `jq` - JSON processor
 - `sha256sum` (coreutils) or `shasum` - Hash utility
 - `qrencode` - QR code generation (optional, for `make cn`)
+- `poetry` - Python dependency management (for CFG App)
 
 ### Remote Servers
 - Linux host with SSH access
@@ -49,14 +52,15 @@ OBFS_PASSWORD="your-obfuscation-password"
 HTTP_PORT="80"
 HTTPS_PORT="443"
 HYSTERIA2_PORT="47012"
+
+# CFG App Configuration
+CONFIG_HOST="your-config-host.com"
 ```
 
 **Important**: 
 - `SALT` is used for password hashing - keep it secret and consistent
 - `OBFS_PASSWORD` is used for traffic obfuscation - use a strong password
-- `HTTP_PORT` is the port for HTTP traffic (default: 80)
-- `HTTPS_PORT` is the port for HTTPS traffic (default: 443)
-- `HYSTERIA2_PORT` is the port for Hysteria2 VPN protocol (default: 47012)
+- `CONFIG_HOST` is the hostname for configuration URLs
 
 ### 3. Configure Server Inventory
 Copy the server configuration template:
@@ -74,24 +78,36 @@ ansible_user=root
 ansible_python_interpreter=/usr/bin/python3
 ```
 
-**Tips**:
-- Use hostname or `1.2.3.4.sslip.io` for valid HTTPS connections
-- Ensure SSH access is configured (key-based authentication recommended)
-
-### 4. Configure Users
-Copy the users template:
+### 4. Configure Users and Subscriptions
+Copy the configuration template:
 ```bash
-cp vpn/users.json.example vpn/users.json
+cp config.json.example config.json
 ```
 
-Edit `vpn/users.json` with your user list:
+Edit `config.json` with your users and subscription configuration:
 ```json
-[
-  "user1",
-  "user2",
-  "user3"
-]
+{
+  "users": [
+    "user1",
+    "user2",
+    "user3"
+  ],
+  "subs": {
+    "default": {
+      "de_1_contabo": {"protocol": "hy2", "host": "de-1.contabo.v.dimonb.com"},
+      "us_1_vultr": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"}
+    },
+    "premium": {
+      "sg_1_linode": {"protocol": "vless", "host": "sg-1.linode.v.dimonb.com"}
+    }
+  }
+}
 ```
+
+**Supported Protocols**:
+- `hy2`: Hysteria2 protocol
+- `vmess`: VMess protocol
+- `vless`: VLESS protocol
 
 ## 🚀 Deployment
 
@@ -115,6 +131,13 @@ This command will:
 - Configure Caddy for TLS certificates
 - Set up Docker Compose services
 - Generate user configurations
+
+### Run CFG App (Development)
+```bash
+make cfgapp-dev
+```
+
+This runs the Python configuration application locally for development and testing.
 
 ## 🔧 Management Commands
 
@@ -149,14 +172,61 @@ vpn/
 ├── install_docker.yml     # Docker installation playbook
 ├── servers.cfg            # Server inventory (create from example)
 ├── servers.cfg.example    # Server inventory template
+├── config.json            # User and subscription configuration
+├── config.json.example    # Configuration template
 ├── .env                   # Environment secrets (create from example)
 ├── env.example            # Environment template
 └── vpn/                   # VPN configuration templates
     ├── docker-compose.yml.j2  # Docker services configuration
     ├── sing-box.json.j2       # VPN server configuration
     ├── Caddyfile.j2           # Web server and TLS configuration
-    ├── users.json             # User list (create from example)
-    └── users.json.example     # User list template
+    └── cfgapp/                # Python configuration application
+        ├── src/               # Application source code
+        ├── tests/             # Test suite
+        ├── examples/          # Template examples
+        ├── pyproject.toml     # Python dependencies
+        ├── Dockerfile         # Container configuration
+        └── README.md          # CFG App documentation
+```
+
+## 🔧 CFG App Features
+
+The CFG App (`vpn/cfgapp/`) provides:
+
+- **Template Processing**: Process templates with RULE-SET and NETSET expansion
+- **Authentication**: Built-in authentication system
+- **Clash Support**: Full Clash YAML configuration processing
+- **Proxy Configuration**: Dynamic proxy generation from JSON configuration
+- **Subscription Support**: Multiple subscription tiers with query parameter selection
+- **IP Aggregation**: Smart IP block aggregation and deduplication
+
+### CFG App Configuration
+
+Create a `.env` file in `vpn/cfgapp/` based on `vpn/cfgapp/env.example`:
+
+```bash
+# API Configuration
+CONFIG_HOST=your-config-host.com
+API_HOST=your-config-host.com
+
+# Authentication
+SALT=your-secret-salt-here
+
+# IP Aggregation Settings
+IPV4_BLOCK_PREFIX=18
+IPV6_BLOCK_PREFIX=32
+
+# Server Configuration
+HOST=0.0.0.0
+PORT=8000
+
+# Proxy Configuration
+PROXY_CONFIG=/path/to/proxy_config.json
+OBFS_PASSWORD=your-obfs-password-here
+HYSTERIA2_PORT=47012
+
+# Logging
+LOG_LEVEL=INFO
 ```
 
 ## 🔒 Security Notes
@@ -166,6 +236,7 @@ vpn/
 - **Traffic Obfuscation**: Configurable obfuscation to bypass restrictions
 - **Docker Isolation**: Services run in isolated containers
 - **Port Configuration**: All ports are configurable via environment variables
+- **Subscription Security**: Multi-tier access control with query parameter validation
 
 ## ⚙️ Environment Variables
 
@@ -176,6 +247,7 @@ vpn/
 | `HTTP_PORT` | HTTP server port | 80 | No |
 | `HTTPS_PORT` | HTTPS server port | 443 | No |
 | `HYSTERIA2_PORT` | Hysteria2 VPN port | 47012 | No |
+| `CONFIG_HOST` | Configuration hostname | - | Yes |
 
 ## 🐛 Troubleshooting
 
@@ -193,10 +265,16 @@ vpn/
    - Ensure target server has internet access
    - Check if Docker is already installed
 
+4. **CFG App issues**
+   - Ensure Poetry is installed: `curl -sSL https://install.python-poetry.org | python3 -`
+   - Install dependencies: `cd vpn/cfgapp && poetry install`
+   - Check environment variables in `vpn/cfgapp/.env`
+
 ### Logs and Debugging
 
 - VPN server logs: `docker-compose logs sing-box`
 - Web server logs: `docker-compose logs caddy`
+- CFG App logs: Check application output during `make cfgapp-dev`
 - Ansible verbose mode: Add `-v` flag to make commands
 
 ## 📝 License
