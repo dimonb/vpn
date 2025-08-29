@@ -1,6 +1,6 @@
 """Tests for template processor."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -77,12 +77,14 @@ IP-CIDR,192.168.1.0/24,DIRECT
 
         mock_response = AsyncMock()
         mock_response.text = "external content"
+        mock_response.raise_for_status = Mock()
         http_client.get.return_value = mock_response
 
         result = await processor.smart_fetch(url, incoming_host, request_headers)
 
         assert result == "external content"
         http_client.get.assert_called_once_with(url)
+        mock_response.raise_for_status.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_smart_fetch_same_host(self, processor: TemplateProcessor, http_client: AsyncMock) -> None:
@@ -95,6 +97,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
 
         mock_response = AsyncMock()
         mock_response.text = "proxied content"
+        mock_response.raise_for_status = Mock()
         http_client.get.return_value = mock_response
 
         result = await processor.smart_fetch(url, incoming_host, request_headers)
@@ -111,6 +114,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         headers = call_args[1]['headers']
         assert 'cookie' not in headers
         assert headers['User-Agent'] == 'test'
+        mock_response.raise_for_status.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_expand_netset_success(self, processor: TemplateProcessor, http_client: AsyncMock) -> None:
@@ -158,7 +162,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         # Mock the rule list response
         rule_response = AsyncMock()
         rule_response.text = "#NETSET https://example.com/netset.txt\n#NETSET https://test.com/block.txt"
-        rule_response.is_success = True
+        rule_response.raise_for_status = Mock()
 
         # Mock NETSET responses
         netset_response = AsyncMock()
@@ -190,7 +194,7 @@ DOMAIN,example.com,PROXY
 DOMAIN-SUFFIX,test.com,DIRECT
 IP-CIDR,192.168.1.0/24,DIRECT
 """
-        rule_response.is_success = True
+        rule_response.raise_for_status = Mock()
 
         http_client.get.return_value = rule_response
 
@@ -217,7 +221,7 @@ DOMAIN,example.com,PROXY
         # Mock responses
         rule_response = AsyncMock()
         rule_response.text = "DOMAIN,test.com,PROXY"
-        rule_response.is_success = True
+        rule_response.raise_for_status = Mock()
 
         http_client.get.return_value = rule_response
 
