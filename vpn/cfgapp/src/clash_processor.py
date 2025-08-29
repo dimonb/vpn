@@ -195,6 +195,6 @@ class ClashProcessor:
         clash_config['rules'] = new_rules
 
         # Convert back to YAML
-        return yaml.dump(clash_config, default_flow_style=False, allow_unicode=True)
+        return yaml.dump(clash_config, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
