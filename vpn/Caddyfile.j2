@@ -10,7 +10,7 @@ http://{{ ansible_host }}:{{ http_port | default(80) }} {
  
   }
   @cfgapp {
-    path /
+    path /*
   }
   reverse_proxy @cfgapp 127.0.0.1:8003
 
@@ -34,7 +34,7 @@ http://{{ ansible_host }}:{{ http_port | default(80) }} {
     curves x25519
   }
   @cfgapp {
-    path /
+    path /*
   }
   reverse_proxy @cfgapp 127.0.0.1:8003
 
