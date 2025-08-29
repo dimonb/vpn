@@ -1,9 +1,11 @@
 """Tests for template processor."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
+
 import httpx
-from src.processor import TemplateProcessor, RULE_RE, NETSET_RE
+import pytest
+
+from src.processor import NETSET_RE, RULE_RE, TemplateProcessor
 
 
 class TestTemplateProcessor:
@@ -28,22 +30,22 @@ RULE-SET,https://example.com/list.txt,PROXY
 RULE-SET,https://test.com/block.txt,DIRECT,no-resolve
 DOMAIN,example.com,PROXY
 """
-        
+
         tasks, passthrough, line_count = processor.parse_template(template_text)
-        
+
         assert line_count == 6
         assert len(tasks) == 2
-        
+
         # Check first task
         assert tasks[0]['url'] == 'https://example.com/list.txt'
         assert tasks[0]['suffix'] == ',PROXY'
         assert tasks[0]['index'] == 2
-        
+
         # Check second task
         assert tasks[1]['url'] == 'https://test.com/block.txt'
         assert tasks[1]['suffix'] == ',DIRECT,no-resolve'
         assert tasks[1]['index'] == 4
-        
+
         # Check passthrough lines
         assert passthrough[0] == ''  # Empty line
         assert passthrough[1] == '# Comment line'
@@ -57,9 +59,9 @@ DOMAIN,example.com,PROXY
 DOMAIN,example.com,PROXY
 IP-CIDR,192.168.1.0/24,DIRECT
 """
-        
+
         tasks, passthrough, line_count = processor.parse_template(template_text)
-        
+
         assert line_count == 4
         assert len(tasks) == 0
         assert passthrough[1] == '# Only comments'
@@ -72,13 +74,13 @@ IP-CIDR,192.168.1.0/24,DIRECT
         url = "https://external.com/path"
         incoming_host = "example.com"
         request_headers = {"User-Agent": "test"}
-        
+
         mock_response = AsyncMock()
         mock_response.text = "external content"
         http_client.get.return_value = mock_response
-        
+
         result = await processor.smart_fetch(url, incoming_host, request_headers)
-        
+
         assert result == "external content"
         http_client.get.assert_called_once_with(url)
 
@@ -86,25 +88,25 @@ IP-CIDR,192.168.1.0/24,DIRECT
     async def test_smart_fetch_same_host(self, processor: TemplateProcessor, http_client: AsyncMock) -> None:
         """Test smart fetch for same host (should proxy via API_HOST)."""
         from src.config import settings
-        
+
         url = "https://example.com/path"
         incoming_host = "example.com"
         request_headers = {"User-Agent": "test", "cookie": "session=123"}
-        
+
         mock_response = AsyncMock()
         mock_response.text = "proxied content"
         http_client.get.return_value = mock_response
-        
+
         result = await processor.smart_fetch(url, incoming_host, request_headers)
-        
+
         assert result == "proxied content"
-        
+
         # Should call with API_HOST
         expected_url = f"https://{settings.api_host}/path"
         http_client.get.assert_called_once()
         call_args = http_client.get.call_args
         assert call_args[0][0] == expected_url
-        
+
         # Should remove cookie header
         headers = call_args[1]['headers']
         assert 'cookie' not in headers
@@ -115,14 +117,14 @@ IP-CIDR,192.168.1.0/24,DIRECT
         """Test successful NETSET expansion."""
         url = "https://example.com/netset.txt"
         suffix = ",PROXY"
-        
+
         mock_response = AsyncMock()
         mock_response.is_success = True
         mock_response.text = "192.168.1.0/24\n10.0.0.0/8"
         http_client.get.return_value = mock_response
-        
+
         result = await processor.expand_netset(url, suffix)
-        
+
         assert len(result) > 0
         assert any("IP-CIDR,192.168.0.0/18" in line for line in result)
         assert any("IP-CIDR,10.0.0.0/18" in line for line in result)
@@ -132,14 +134,14 @@ IP-CIDR,192.168.1.0/24,DIRECT
         """Test NETSET expansion failure."""
         url = "https://example.com/netset.txt"
         suffix = ",PROXY"
-        
+
         mock_response = AsyncMock()
         mock_response.is_success = False
         mock_response.status_code = 404
         http_client.get.return_value = mock_response
-        
+
         result = await processor.expand_netset(url, suffix)
-        
+
         assert len(result) == 1
         assert result[0] == f"# NETSET fetch failed: {url} (404)"
 
@@ -152,21 +154,21 @@ IP-CIDR,192.168.1.0/24,DIRECT
         }
         incoming_host = "example.com"
         request_headers = {"User-Agent": "test"}
-        
+
         # Mock the rule list response
         rule_response = AsyncMock()
         rule_response.text = "#NETSET https://example.com/netset.txt\n#NETSET https://test.com/block.txt"
         rule_response.is_success = True
-        
+
         # Mock NETSET responses
         netset_response = AsyncMock()
         netset_response.text = "192.168.1.0/24"
         netset_response.is_success = True
-        
+
         http_client.get.side_effect = [rule_response, netset_response, netset_response]
-        
+
         result = await processor.expand_rule_set(task, incoming_host, request_headers)
-        
+
         assert len(result) > 1
         assert result[0] == f"# RULE-SET,{task['url']}"
         assert any("IP-CIDR,192.168.0.0/18" in line for line in result)
@@ -180,7 +182,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         }
         incoming_host = "example.com"
         request_headers = {"User-Agent": "test"}
-        
+
         # Mock the rule list response
         rule_response = AsyncMock()
         rule_response.text = """
@@ -189,11 +191,11 @@ DOMAIN-SUFFIX,test.com,DIRECT
 IP-CIDR,192.168.1.0/24,DIRECT
 """
         rule_response.is_success = True
-        
+
         http_client.get.return_value = rule_response
-        
+
         result = await processor.expand_rule_set(task, incoming_host, request_headers)
-        
+
         assert len(result) == 4  # Header + 3 rules
         assert result[0] == f"# RULE-SET,{task['url']}"
         assert "DOMAIN,example.com,PROXY" in result
@@ -211,16 +213,16 @@ DOMAIN,example.com,PROXY
 """
         incoming_host = "example.com"
         request_headers = {"User-Agent": "test"}
-        
+
         # Mock responses
         rule_response = AsyncMock()
         rule_response.text = "DOMAIN,test.com,PROXY"
         rule_response.is_success = True
-        
+
         http_client.get.return_value = rule_response
-        
+
         result = await processor.process_template(template_text, incoming_host, request_headers)
-        
+
         assert "# Template with rules" in result
         assert "DOMAIN,test.com,PROXY" in result
         assert "DOMAIN,example.com,PROXY" in result
@@ -238,17 +240,17 @@ class TestRegexPatterns:
             "  RULE-SET,https://example.com/list.txt,PROXY  ",
             "RULE-SET,https://example.com/list.txt,PROXY # comment"
         ]
-        
+
         invalid_cases = [
             "RULE-SET",
             "RULE-SET,https://example.com/list.txt",
             "RULE-SET,https://example.com/list.txt,",
             "RULE-SET,https://example.com/list.txt,PROXY,"
         ]
-        
+
         for case in valid_cases:
             assert RULE_RE.match(case) is not None, f"Should match: {case}"
-        
+
         for case in invalid_cases:
             assert RULE_RE.match(case) is None, f"Should not match: {case}"
 
@@ -260,16 +262,16 @@ class TestRegexPatterns:
             "  #NETSET https://example.com/netset.txt  ",
             "#NETSET https://example.com/netset.txt # comment"
         ]
-        
+
         invalid_cases = [
             "NETSET https://example.com/netset.txt",
             "#NETSET",
             "#NETSET ",
             "NETSET https://example.com/netset.txt"
         ]
-        
+
         for case in valid_cases:
             assert NETSET_RE.match(case) is not None, f"Should match: {case}"
-        
+
         for case in invalid_cases:
             assert NETSET_RE.match(case) is None, f"Should not match: {case}"

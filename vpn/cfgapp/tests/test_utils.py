@@ -1,13 +1,15 @@
 """Tests for utils module."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from src.utils import (
     IPProcessor,
     TemplateProcessor,
+    dedupe_lines,
     ipv4_cover_blocks,
     ipv6_cidr_to_blocks,
-    dedupe_lines,
     netset_expand,
 )
 
@@ -144,16 +146,16 @@ DOMAIN-SUFFIX,test.com,DIRECT
         """Test NETSET expansion with successful fetch."""
         ip_processor = IPProcessor(ipv4_block_prefix=18)
         processor = TemplateProcessor(ip_processor)
-        
+
         # Create a mock response that behaves like aiohttp.ClientResponse
         mock_response = AsyncMock()
         mock_response.ok = True
         mock_response.text = AsyncMock(return_value="192.168.1.0/24")
-        
+
         # Create a mock session that returns the mock response
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(return_value=mock_response)
-        
+
         result = await processor.expand_netset(
             "https://example.com/netset.txt", ",PROXY,no-resolve", mock_session
         )
@@ -164,14 +166,14 @@ DOMAIN-SUFFIX,test.com,DIRECT
         """Test NETSET expansion with failed fetch."""
         ip_processor = IPProcessor()
         processor = TemplateProcessor(ip_processor)
-        
+
         mock_response = AsyncMock()
         mock_response.ok = False
         mock_response.status = 404
-        
+
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(return_value=mock_response)
-        
+
         result = await processor.expand_netset(
             "https://example.com/netset.txt", ",PROXY,no-resolve", mock_session
         )
@@ -182,21 +184,21 @@ DOMAIN-SUFFIX,test.com,DIRECT
         """Test RULE-SET expansion with NETSET entries."""
         ip_processor = IPProcessor(ipv4_block_prefix=18)
         processor = TemplateProcessor(ip_processor)
-        
+
         mock_response = AsyncMock()
         mock_response.ok = True
         mock_response.text = AsyncMock(return_value="#NETSET https://example.com/netset.txt")
-        
+
         mock_netset_response = AsyncMock()
         mock_netset_response.ok = True
         mock_netset_response.text = AsyncMock(return_value="192.168.1.0/24")
-        
+
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(side_effect=[mock_response, mock_netset_response])
-        
+
         task = {"url": "https://example.com/rules.txt", "suffix": ",PROXY,no-resolve"}
         result = await processor.expand_rule_set(task, mock_session)
-        
+
         assert result[0] == "# RULE-SET,https://example.com/rules.txt"
         assert "IP-CIDR,192.168.0.0/18,PROXY,no-resolve" in result
 
@@ -205,20 +207,20 @@ DOMAIN-SUFFIX,test.com,DIRECT
         """Test RULE-SET expansion with regular rules."""
         ip_processor = IPProcessor()
         processor = TemplateProcessor(ip_processor)
-        
+
         mock_response = AsyncMock()
         mock_response.ok = True
         mock_response.text = AsyncMock(return_value="""
 DOMAIN,example.com,PROXY
 DOMAIN-SUFFIX,test.com,DIRECT
 """)
-        
+
         mock_session = AsyncMock()
         mock_session.get = AsyncMock(return_value=mock_response)
-        
+
         task = {"url": "https://example.com/rules.txt", "suffix": ",PROXY,no-resolve"}
         result = await processor.expand_rule_set(task, mock_session)
-        
+
         assert result[0] == "# RULE-SET,https://example.com/rules.txt"
         assert "DOMAIN,example.com,PROXY,no-resolve" in result
         assert "DOMAIN-SUFFIX,test.com,PROXY,no-resolve" in result
@@ -228,25 +230,25 @@ DOMAIN-SUFFIX,test.com,DIRECT
         """Test full template processing."""
         ip_processor = IPProcessor(ipv4_block_prefix=18)
         processor = TemplateProcessor(ip_processor)
-        
+
         template_text = """
 DOMAIN,example.com,PROXY
 RULE-SET,https://example.com/rules.txt,PROXY,no-resolve
 DOMAIN-SUFFIX,test.com,DIRECT
 """
-        
+
         # Mock the RULE-SET response
         mock_response = AsyncMock()
         mock_response.ok = True
         mock_response.text = AsyncMock(return_value="192.168.1.0/24")
-        
+
         with patch("aiohttp.ClientSession") as mock_session_class:
             mock_session = AsyncMock()
             mock_session.get = AsyncMock(return_value=mock_response)
             mock_session_class.return_value.__aenter__.return_value = mock_session
-            
+
             result = await processor.process_template(template_text)
-            
+
             assert "DOMAIN,example.com,PROXY" in result
             assert "192.168.1.0/24,PROXY,no-resolve" in result
             assert "DOMAIN-SUFFIX,test.com,DIRECT" in result
