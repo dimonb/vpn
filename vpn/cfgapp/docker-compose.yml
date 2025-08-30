@@ -1,4 +1,4 @@
-version: '3.8'
+# version: '3.8'  # This is obsolete in newer docker-compose
 
 services:
   cfgapp:
@@ -34,9 +34,9 @@ services:
       
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    volumes:
+    # volumes:
       # Mount configuration files if they exist
-      - ${PROXY_CONFIG:-/dev/null}:${PROXY_CONFIG:-/dev/null}:ro
+      # - ${PROXY_CONFIG:-/dev/null}:${PROXY_CONFIG:-/dev/null}:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
