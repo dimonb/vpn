@@ -1,5 +1,5 @@
 # Multi-stage build for optimized image size
-FROM python:3.12-slim as builder
+FROM python:3.12-slim AS builder
 
 # Set working directory
 WORKDIR /app
@@ -23,7 +23,7 @@ RUN poetry config virtualenvs.create false
 RUN poetry install --no-interaction --no-root --only=main
 
 # Production stage
-FROM python:3.12-slim as production
+FROM python:3.12-slim AS production
 
 # Set working directory
 WORKDIR /app
