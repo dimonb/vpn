@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  cfgapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: cfgapp
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Server Configuration
+      - HOST=0.0.0.0
+      - PORT=8000
+      
+      # API Configuration
+      - CONFIG_HOST=${CONFIG_HOST:-shadowrocket.ebac.dev}
+      - API_HOST=${API_HOST:-shadowrocket.ebac.dev}
+      
+      # Authentication
+      - SALT=${SALT:-your-secret-salt-here}
+      
+      # IP Aggregation Settings
+      - IPV4_BLOCK_PREFIX=${IPV4_BLOCK_PREFIX:-18}
+      - IPV6_BLOCK_PREFIX=${IPV6_BLOCK_PREFIX:-32}
+      
+      # Proxy Configuration
+      - PROXY_CONFIG=${PROXY_CONFIG:-}
+      - OBFS_PASSWORD=${OBFS_PASSWORD:-}
+      - HYSTERIA2_PORT=${HYSTERIA2_PORT:-47012}
+      - BASE_URL=${BASE_URL:-}
+      
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      # Mount configuration files if they exist
+      - ${PROXY_CONFIG:-/dev/null}:${PROXY_CONFIG:-/dev/null}:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - cfgapp_network
+
+networks:
+  cfgapp_network:
+    driver: bridge

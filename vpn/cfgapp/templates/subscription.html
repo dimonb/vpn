@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShadowRocket Subscription</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .title {
+            color: #333;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+        
+        .qr-container {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: inline-block;
+        }
+        
+        .qr-code {
+            max-width: 200px;
+            height: auto;
+        }
+        
+        .subscription-url {
+            background: #f1f3f4;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            word-break: break-all;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+            color: #555;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .copy-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 250px;
+        }
+        
+        .copy-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .copy-button:active {
+            transform: translateY(0);
+        }
+        
+        .copy-button.copied {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4);
+        }
+        
+        .instructions {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-top: 20px;
+        }
+        
+        .step {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .user-info {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #1565c0;
+            font-weight: 500;
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            .title {
+                font-size: 24px;
+            }
+            
+            .qr-code {
+                max-width: 180px;
+            }
+            
+            .subscription-url {
+                font-size: 11px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">🚀 ShadowRocket</h1>
+        <p class="subtitle">Subscription Configuration</p>
+        
+        {% if user %}
+        <div class="user-info">
+            👤 User: <strong>{{ user }}</strong>
+            {% if subscription %}
+            <br>📦 Subscription: <strong>{{ subscription }}</strong>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="qr-container">
+            <img src="data:image/png;base64,{{ qr_code }}" alt="QR Code" class="qr-code">
+        </div>
+        
+        <div class="subscription-url" id="subscriptionUrl">{{ subscription_url }}</div>
+        
+        <button class="copy-button" id="copyButton" onclick="copyToClipboard()">
+            📋 Copy to Clipboard
+        </button>
+        
+        <div class="instructions">
+            <div class="step">
+                <strong>Step 1:</strong> Copy the subscription URL above or scan the QR code
+            </div>
+            <div class="step">
+                <strong>Step 2:</strong> Open ShadowRocket app on your device
+            </div>
+            <div class="step">
+                <strong>Step 3:</strong> Allow to paste from clipboard
+            </div>
+            <div class="step">
+                <strong>Step 4:</strong> Your proxies will be automatically imported
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function copyToClipboard() {
+            const button = document.getElementById('copyButton');
+            const url = document.getElementById('subscriptionUrl').textContent;
+            
+            try {
+                // Modern browsers
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(url);
+                } else {
+                    // Fallback for older browsers and iOS Safari
+                    const textArea = document.createElement('textarea');
+                    textArea.value = url;
+                    textArea.style.position = 'fixed';
+                    textArea.style.opacity = '0';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                    } catch (err) {
+                        console.error('Fallback copy failed:', err);
+                        // Show manual copy instruction
+                        alert('Please manually copy the subscription URL');
+                        return;
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                }
+                
+                // Visual feedback
+                button.textContent = '✅ Copied!';
+                button.classList.add('copied');
+                
+                setTimeout(() => {
+                    button.textContent = '📋 Copy to Clipboard';
+                    button.classList.remove('copied');
+                }, 2000);
+                
+            } catch (err) {
+                console.error('Copy failed:', err);
+                
+                // iOS Safari specific handling
+                if (navigator.userAgent.match(/ipad|iphone/i)) {
+                    const range = document.createRange();
+                    const selection = window.getSelection();
+                    const urlElement = document.getElementById('subscriptionUrl');
+                    
+                    range.selectNodeContents(urlElement);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    
+                    button.textContent = '👆 Selected - Copy manually';
+                    setTimeout(() => {
+                        button.textContent = '📋 Copy to Clipboard';
+                    }, 3000);
+                } else {
+                    alert('Copy failed. Please manually copy the subscription URL.');
+                }
+            }
+        }
+        
+        // Auto-select URL on mobile tap
+        document.getElementById('subscriptionUrl').addEventListener('click', function() {
+            if (window.getSelection) {
+                const range = document.createRange();
+                range.selectNodeContents(this);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }
+        });
+    </script>
+</body>
+</html>

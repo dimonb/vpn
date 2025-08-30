@@ -5,7 +5,8 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
+from fastapi.templating import Jinja2Templates
 
 from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 # Global proxy config instance
 proxy_config: ProxyConfig | None = None
+
+# Templates
+templates = Jinja2Templates(directory="templates")
 
 
 @asynccontextmanager
@@ -114,6 +118,57 @@ async def shadowrocket_subscription(request: Request):
         raise
     except Exception as e:
         logger.error(f"Error generating ShadowRocket subscription: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
+@app.get("/sub", response_class=HTMLResponse)
+async def subscription_page(request: Request):
+    """Subscription page with QR code and copy button."""
+    try:
+        # Check if proxy config is available
+        if not proxy_config:
+            raise HTTPException(
+                status_code=500, detail="Proxy configuration not available"
+            )
+
+        # Require authentication
+        require_auth(request, proxy_config)
+
+        # Extract subscription and password from query parameters
+        query_params = dict(request.query_params)
+        sub_name = query_params.get("sub")
+        password = query_params.get("hash")
+        user = query_params.get("u")
+
+        # Get base URL from settings or fallback to request
+        base_url = settings.base_url
+        if not base_url:
+            base_url = f"{request.url.scheme}://{request.headers.get('host', 'localhost')}"
+
+        # Generate subscription URL
+        subscription_url = proxy_config.generate_subscription_url(
+            base_url, user, sub_name, password
+        )
+
+        # Generate QR code
+        qr_code_b64 = proxy_config.generate_qr_code(subscription_url)
+
+        # Render template
+        return templates.TemplateResponse(
+            request,
+            "subscription.html",
+            {
+                "subscription_url": subscription_url,
+                "qr_code": qr_code_b64,
+                "user": user,
+                "subscription": sub_name or "default",
+            },
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating subscription page: {e}")
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 

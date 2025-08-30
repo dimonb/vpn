@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     proxy_config: str = Field(default="")
     obfs_password: str = Field(default="")
     hysteria2_port: int = Field(default=47012)
+    base_url: str = Field(default="")
 
     # Logging
     log_level: str = Field(default="INFO")

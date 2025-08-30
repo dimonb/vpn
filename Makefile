@@ -37,7 +37,7 @@ deploy: check-env
 
 cfgapp-dev:
 	@cfg_path=$$(pwd)/config.json; \
-	cd vpn/cfgapp && OBFS_PASSWORD=$(OBFS_PASSWORD) PROXY_CONFIG=$$cfg_path HYSTERIA2_PORT=$(HYSTERIA2_PORT) SALT=$(SALT) CONFIG_HOST=$(CONFIG_HOST) .venv/bin/poetry run python -m src.main
+	cd vpn/cfgapp && BASE_URL=$(BASE_URL) OBFS_PASSWORD=$(OBFS_PASSWORD) PROXY_CONFIG=$$cfg_path HYSTERIA2_PORT=$(HYSTERIA2_PORT) SALT=$(SALT) CONFIG_HOST=$(CONFIG_HOST) .venv/bin/poetry run python -m src.main
 
 deploy-test:
 	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-1 deploy_v2ray.yml

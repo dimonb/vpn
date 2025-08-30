@@ -1,11 +1,15 @@
 """Proxy configuration management and generation."""
 
 import base64
+import io
 import json
 import logging
 import urllib.parse
 from pathlib import Path
 from typing import Any
+
+import qrcode
+from qrcode.image.pil import PilImage
 
 from .config import settings
 
@@ -417,3 +421,67 @@ class ProxyConfig:
 
         query_string = urllib.parse.urlencode(params)
         return f"vless://{uuid}@{server}:{port}?{query_string}#{name}"
+
+    def generate_subscription_url(
+        self, base_url: str, user: str, sub_name: str | None = None, password: str | None = None
+    ) -> str:
+        """Generate sub:// URL for subscription.
+
+        Args:
+            base_url: Base URL of the application
+            user: Username for authentication
+            sub_name: Subscription name, defaults to 'default'
+            password: Password from query parameter (optional)
+
+        Returns:
+            sub:// URL string
+        """
+        # Build the /sr endpoint URL with parameters
+        sr_url = f"{base_url}/sr"
+        params = {"u": user}  # User is required for authentication
+
+        if sub_name:
+            params["sub"] = sub_name
+        if password:
+            params["hash"] = password
+
+        query_string = urllib.parse.urlencode(params)
+        sr_url = f"{sr_url}?{query_string}"
+
+        # Encode the URL to base64
+        sr_url_b64 = base64.b64encode(sr_url.encode()).decode()
+
+        # Create sub:// URL
+        return f"sub://{sr_url_b64}?udp=1&allowInsecure=1"
+
+    def generate_qr_code(self, data: str) -> str:
+        """Generate QR code image as base64 string.
+
+        Args:
+            data: Data to encode in QR code
+
+        Returns:
+            Base64 encoded PNG image
+        """
+        # Create QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(data)
+        qr.make(fit=True)
+
+        # Create image
+        img = qr.make_image(
+            fill_color="black", back_color="white", image_factory=PilImage
+        )
+
+        # Convert to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        buffer.seek(0)
+        img_b64 = base64.b64encode(buffer.getvalue()).decode()
+
+        return img_b64

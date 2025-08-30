@@ -37,6 +37,7 @@ PORT=8000
 PROXY_CONFIG=/path/to/proxy_config.json
 OBFS_PASSWORD=your-obfs-password-here
 HYSTERIA2_PORT=47012
+BASE_URL=https://your-domain.com
 
 # Logging
 LOG_LEVEL=INFO
@@ -86,6 +87,7 @@ The system generates **one proxy configuration per proxy entry** in the subscrip
 
 - **OBFS_PASSWORD**: Password for obfs (obfuscation) in Hysteria2 protocol
 - **HYSTERIA2_PORT**: Fixed port number for Hysteria2 proxies (default: 47012)
+- **BASE_URL**: Base URL for subscription generation (e.g., https://your-domain.com). If not set, the system will use the request host as fallback
 
 #### Password Configuration
 
@@ -317,7 +319,68 @@ vless://uuid@server:port?type=ws&path=/ws&host=server&security=tls&sni=server#na
 2. **Automatic Updates**: ShadowRocket will periodically fetch updates from the endpoint
 3. **Authentication**: Each request requires valid user authentication
 
+## Subscription Page
+
+The application provides a user-friendly web page at `/sub` for easy subscription management.
+
+### Features
+
+- **🎨 Modern Design**: Beautiful responsive interface with gradient styling
+- **📱 Mobile Optimized**: Works perfectly on iOS, Android, and desktop
+- **📋 Smart Copy**: Advanced clipboard functionality with fallbacks for all devices
+- **🔍 QR Code**: Auto-generated QR codes for instant mobile scanning
+- **📖 Instructions**: Step-by-step guide for ShadowRocket setup
+- **👤 User Info**: Displays current user and subscription details
+- **🔐 Secure**: Same authentication system as other endpoints
+
+### URL Format
+
+The page generates `sub://` URLs in the correct format:
+```
+sub://<base64_encoded_sr_endpoint>?udp=1&allowInsecure=1
+```
+
+Where the base64 part contains the `/sr` endpoint URL with parameters.
+
+### Usage Examples
+
+```bash
+# Basic usage
+GET /sub?u=dimonb&hash=valid_hash
+
+# With specific subscription
+GET /sub?u=dimonb&hash=valid_hash&sub=premium
+
+# With custom password
+GET /sub?u=dimonb&hash=custom_password&sub=default
+```
+
+### Generated sub:// URL Format
+
+The subscription page generates URLs that include the user authentication:
+
+```
+sub://aHR0cHM6Ly9leGFtcGxlLmNvbS9zcj91PWRpbW9uYiZzdWI9ZGVmYXVsdA==?udp=1&allowInsecure=1
+```
+
+Which decodes to:
+```
+https://example.com/sr?u=dimonb&sub=default
+```
+
+The user parameter (`u=username`) is automatically included to ensure proper authentication when ShadowRocket fetches the subscription.
+
+### Mobile Compatibility
+
+The page includes special handling for iOS Safari and mobile browsers:
+- **iOS Safari**: Uses `document.execCommand` fallback
+- **Modern browsers**: Uses `navigator.clipboard` API
+- **Touch devices**: Auto-selects text on tap
+- **Copy feedback**: Visual confirmation of successful copying
+
 ## Installation
+
+### Local Development
 
 1. Install dependencies:
 ```bash
@@ -334,6 +397,57 @@ cp env.example .env
 ```bash
 poetry run python -m src.main
 ```
+
+### Docker Deployment
+
+#### Using Docker Compose (Recommended)
+
+1. Create environment file:
+```bash
+cp env.example .env
+# Edit .env with your configuration
+```
+
+2. Start the application:
+```bash
+docker-compose up -d
+```
+
+3. Check logs:
+```bash
+docker-compose logs -f cfgapp
+```
+
+4. Stop the application:
+```bash
+docker-compose down
+```
+
+#### Using Docker directly
+
+1. Build the image:
+```bash
+docker build -t cfgapp .
+```
+
+2. Run the container:
+```bash
+docker run -d \
+  --name cfgapp \
+  -p 8000:8000 \
+  -e BASE_URL=https://your-domain.com \
+  -e PROXY_CONFIG=/app/config.json \
+  -v /path/to/your/config.json:/app/config.json:ro \
+  cfgapp
+```
+
+#### Docker Features
+
+- **Multi-stage build**: Optimized image size by separating build and runtime dependencies
+- **Non-root user**: Runs as unprivileged user for security
+- **Health checks**: Built-in health monitoring
+- **Template support**: Includes all templates and static files
+- **Environment variables**: Full configuration through environment variables
 
 ## Development
 
@@ -354,6 +468,7 @@ poetry run ruff format src/ tests/
 
 - `GET /health` - Health check endpoint
 - `GET /sr` - ShadowRocket subscription endpoint (requires authentication)
+- `GET /sub` - Subscription page with QR code (requires authentication)
 - `GET /{path:path}` - Main proxy handler for all other requests
 
 ## Template Tags
