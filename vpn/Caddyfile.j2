@@ -38,20 +38,13 @@ http://{{ ansible_host }}:{{ http_port | default(80) }} {
   }
   reverse_proxy @cfgapp 127.0.0.1:8003
 
-  @openvpn path /openvpn/metrics*
-  handle @openvpn {
-    reverse_proxy 127.0.0.1:9176
+  @node path /node/metrics*
+  handle @node {
+    rewrite * /metrics
+    reverse_proxy 127.0.0.1:9100
   }
-  basicauth @openvpn {
-    admin JDJhJDE0JGpSSGt6WXl1RURhY0o1MzF2MHlpMC5XMWNtdjVNVmFNbnZ6SlVRMHNsLk9Od05mMjFJMndX
-  }
-
-  @v2ray path /v2ray/metrics*
-  handle @v2ray {
-    reverse_proxy 127.0.0.1:9550
-  }
-  basicauth @v2ray {
-    admin JDJhJDE0JGpSSGt6WXl1RURhY0o1MzF2MHlpMC5XMWNtdjVNVmFNbnZ6SlVRMHNsLk9Od05mMjFJMndX
+  basicauth @node {
+    metrics {{ metrics_pwd | password_hash('bcrypt') }}
   }
 }
 

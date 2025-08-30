@@ -29,10 +29,14 @@ check-env:
 		echo "ERROR: OBFS_PASSWORD is not set. Please create .env file from env.example and set OBFS_PASSWORD value"; \
 		exit 1; \
 	fi
+	@if [ -z "$(METRICS_PWD)" ]; then \
+		echo "ERROR: METRICS_PWD is not set. Please create .env file from env.example and set METRICS_PWD value"; \
+		exit 1; \
+	fi
 	@echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT)"
 
 deploy: check-env
-	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "config_host=$(CONFIG_HOST)"
+	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$(METRICS_PWD)"
 
 
 cfgapp-dev:

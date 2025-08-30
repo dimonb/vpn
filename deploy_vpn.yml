@@ -63,5 +63,5 @@
     - name: Run Docker Compose
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"
-        cmd: docker compose down && docker compose up --pull always --remove-orphans --force-recreate -d 
+        cmd: docker compose build && docker compose down && docker compose up --pull always --remove-orphans --force-recreate -d 
 
