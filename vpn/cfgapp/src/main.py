@@ -81,6 +81,42 @@ async def health_check():
     return {"status": "healthy", "version": "0.1.0"}
 
 
+@app.get("/sr")
+async def shadowrocket_subscription(request: Request):
+    """ShadowRocket subscription endpoint."""
+    try:
+        # Check if proxy config is available
+        if not proxy_config:
+            raise HTTPException(
+                status_code=500, detail="Proxy configuration not available"
+            )
+
+        # Require authentication
+        require_auth(request, proxy_config)
+
+        # Extract subscription and password from query parameters
+        query_params = dict(request.query_params)
+        sub_name = query_params.get("sub")
+        password = query_params.get("hash")
+
+        # Generate ShadowRocket subscription
+        subscription_b64 = proxy_config.generate_shadowrocket_subscription(
+            sub_name, password
+        )
+
+        return Response(
+            content=subscription_b64,
+            status_code=200,
+            headers={"content-type": "text/plain; charset=utf-8"},
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating ShadowRocket subscription: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
+
 @app.get("/{path:path}")
 async def proxy_handler(request: Request, path: str):
     """Main proxy handler that mimics the Cloudflare Worker behavior."""

@@ -1,7 +1,9 @@
 """Proxy configuration management and generation."""
 
+import base64
 import json
 import logging
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -297,3 +299,121 @@ class ProxyConfig:
         """
         proxy_configs = self.generate_proxy_configs(sub_name, password)
         return [config["name"] for config in proxy_configs]
+
+    def generate_shadowrocket_subscription(
+        self, sub_name: str | None = None, password: str | None = None
+    ) -> str:
+        """Generate ShadowRocket subscription URLs.
+
+        Args:
+            sub_name: Subscription name, defaults to 'default'
+            password: Password from query parameter (optional)
+
+        Returns:
+            Base64 encoded subscription URLs
+        """
+        proxy_configs = self.generate_proxy_configs(sub_name, password)
+        urls = []
+
+        for config in proxy_configs:
+            protocol = config.get("type", "")
+            if protocol == "hysteria2":
+                url = self._generate_hysteria2_url(config)
+            elif protocol == "vmess":
+                url = self._generate_vmess_url(config)
+            elif protocol == "vless":
+                url = self._generate_vless_url(config)
+            else:
+                logger.warning(f"Unsupported protocol for ShadowRocket: {protocol}")
+                continue
+
+            if url:
+                urls.append(url)
+
+        # Join URLs with newlines and encode to base64
+        subscription_content = "\n".join(urls)
+        return base64.b64encode(subscription_content.encode()).decode()
+
+    def _generate_hysteria2_url(self, config: dict[str, Any]) -> str:
+        """Generate Hysteria2 URL for ShadowRocket.
+
+        Args:
+            config: Hysteria2 configuration
+
+        Returns:
+            Hysteria2 URL string
+        """
+        password = config["password"]
+        server = config["server"]
+        port = config["port"]
+        name = config["name"]
+
+        # Build query parameters
+        params = {
+            "peer": "i.am.com",
+            "insecure": "1",
+            "alpn": "h3",
+            "obfs": "salamander",
+            "obfs-password": config["obfs-password"],
+            "udp": "1",
+        }
+
+        query_string = urllib.parse.urlencode(params)
+        return f"hysteria2://{password}@{server}:{port}?{query_string}#{name}.hy2"
+
+    def _generate_vmess_url(self, config: dict[str, Any]) -> str:
+        """Generate VMess URL for ShadowRocket.
+
+        Args:
+            config: VMess configuration
+
+        Returns:
+            VMess URL string
+        """
+        # Create VMess configuration JSON
+        vmess_config = {
+            "v": "2",
+            "ps": config["name"],
+            "add": config["server"],
+            "port": str(config["port"]),
+            "id": config["uuid"],
+            "aid": "0",
+            "net": "ws",
+            "type": "none",
+            "host": "",
+            "path": "/ws",
+            "tls": "tls",
+            "fragment": "1,40-60,30-50",
+        }
+
+        # Encode to base64
+        config_json = json.dumps(vmess_config, separators=(",", ":"))
+        config_b64 = base64.b64encode(config_json.encode()).decode()
+
+        return f"vmess://{config_b64}?fragment=1,40-60,30-50"
+
+    def _generate_vless_url(self, config: dict[str, Any]) -> str:
+        """Generate VLESS URL for ShadowRocket.
+
+        Args:
+            config: VLESS configuration
+
+        Returns:
+            VLESS URL string
+        """
+        uuid = config["uuid"]
+        server = config["server"]
+        port = config["port"]
+        name = config["name"]
+
+        # Build query parameters
+        params = {
+            "type": "ws",
+            "path": "/ws",
+            "host": server,
+            "security": "tls",
+            "sni": server,
+        }
+
+        query_string = urllib.parse.urlencode(params)
+        return f"vless://{uuid}@{server}:{port}?{query_string}#{name}"

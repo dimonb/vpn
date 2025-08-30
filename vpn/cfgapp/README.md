@@ -251,11 +251,71 @@ GET /clash.tpl?hash=30dfb07872c73a324ec6692a00872e5cd1f4d99ee2c4a0a9d210ea7b8a1d
 GET /clash.tpl?sub=premium&hash=30dfb07872c73a324ec6692a00872e5cd1f4d99ee2c4a0a9d210ea7b8a1d48e6
 ```
 
+### ShadowRocket Subscription
+```
+GET /sr?u=dimonb&hash=valid_hash
+GET /sr?u=dimonb&hash=valid_hash&sub=premium
+GET /sr?u=dimonb&hash=custom_password&sub=default
+```
+
 ### Authentication Failure Cases
 
 - User not in PROXY_CONFIG users list
 - Invalid hash calculation
 - Missing user or hash parameters
+
+## ShadowRocket Subscription
+
+The application provides a dedicated endpoint `/sr` for ShadowRocket subscription generation.
+
+### Features
+
+- **Base64 Encoded**: Returns base64-encoded subscription content
+- **Multiple Protocols**: Supports Hysteria2, VMess, and VLESS protocols
+- **Authentication Required**: Uses the same authentication system as templates
+- **Subscription Support**: Works with multiple subscriptions (default, premium, etc.)
+- **Custom Passwords**: Supports custom passwords via `hash` parameter
+
+### URL Formats
+
+#### Hysteria2
+```
+hysteria2://password@server:port?peer=i.am.com&insecure=1&alpn=h3&obfs=salamander&obfs-password=xxx&udp=1#name.hy2
+```
+
+#### VMess
+```
+vmess://base64_config?fragment=1,40-60,30-50
+```
+
+Where `base64_config` contains:
+```json
+{
+  "v": "2",
+  "ps": "proxy_name",
+  "add": "server",
+  "port": "port",
+  "id": "uuid",
+  "aid": "0",
+  "net": "ws",
+  "type": "none",
+  "host": "",
+  "path": "/ws",
+  "tls": "tls",
+  "fragment": "1,40-60,30-50"
+}
+```
+
+#### VLESS
+```
+vless://uuid@server:port?type=ws&path=/ws&host=server&security=tls&sni=server#name
+```
+
+### Usage
+
+1. **Import into ShadowRocket**: Copy the base64 response and import as subscription
+2. **Automatic Updates**: ShadowRocket will periodically fetch updates from the endpoint
+3. **Authentication**: Each request requires valid user authentication
 
 ## Installation
 
@@ -293,6 +353,7 @@ poetry run ruff format src/ tests/
 ## API Endpoints
 
 - `GET /health` - Health check endpoint
+- `GET /sr` - ShadowRocket subscription endpoint (requires authentication)
 - `GET /{path:path}` - Main proxy handler for all other requests
 
 ## Template Tags
