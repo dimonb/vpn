@@ -186,7 +186,7 @@ class TestSubscriptionPage:
 
         # Check format
         assert sub_url.startswith("sub://")
-        assert sub_url.endswith("?udp=1&allowInsecure=1")
+        assert "?udp=1&allowInsecure=1#default" in sub_url
 
         # Decode base64 part
         b64_part = sub_url.split("sub://")[1].split("?")[0]
@@ -224,6 +224,9 @@ class TestSubscriptionPage:
         assert "u=testuser" in decoded_url
         assert "sub=premium" in decoded_url
         assert "hash=custom-password" in decoded_url
+
+        # Should end with subscription name fragment
+        assert sub_url.endswith("#premium")
 
     @patch("src.main.proxy_config")
     @patch("src.config.settings")

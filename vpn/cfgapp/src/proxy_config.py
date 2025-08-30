@@ -451,8 +451,9 @@ class ProxyConfig:
         # Encode the URL to base64
         sr_url_b64 = base64.b64encode(sr_url.encode()).decode()
 
-        # Create sub:// URL
-        return f"sub://{sr_url_b64}?udp=1&allowInsecure=1"
+        # Create sub:// URL with subscription name fragment
+        subscription_name = sub_name or "default"
+        return f"sub://{sr_url_b64}?udp=1&allowInsecure=1#{subscription_name}"
 
     def generate_qr_code(self, data: str) -> str:
         """Generate QR code image as base64 string.

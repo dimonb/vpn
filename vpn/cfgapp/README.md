@@ -357,16 +357,21 @@ GET /sub?u=dimonb&hash=custom_password&sub=default
 
 ### Generated sub:// URL Format
 
-The subscription page generates URLs that include the user authentication:
+The subscription page generates URLs that include the user authentication and subscription name:
 
 ```
-sub://aHR0cHM6Ly9leGFtcGxlLmNvbS9zcj91PWRpbW9uYiZzdWI9ZGVmYXVsdA==?udp=1&allowInsecure=1
+sub://aHR0cHM6Ly9leGFtcGxlLmNvbS9zcj91PWRpbW9uYiZzdWI9ZGVmYXVsdA==?udp=1&allowInsecure=1#default
 ```
 
 Which decodes to:
 ```
 https://example.com/sr?u=dimonb&sub=default
 ```
+
+The URL format is: `sub://<base64_sr_url>?udp=1&allowInsecure=1#<subscription_name>`
+- Base64 part contains the `/sr` endpoint URL with authentication parameters
+- Fragment (`#`) contains the subscription name for display in ShadowRocket
+- Query parameters are ShadowRocket-specific settings
 
 The user parameter (`u=username`) is automatically included to ensure proper authentication when ShadowRocket fetches the subscription.
 
