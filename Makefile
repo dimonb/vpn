@@ -13,6 +13,7 @@ OBFS_PASSWORD ?= ""
 HTTP_PORT ?= "80"
 HTTPS_PORT ?= "443"
 HYSTERIA2_PORT ?= "47012"
+HYSTERIA2_V2_PORT ?= "47013"
 CONFIG_HOST ?= "fake.host"
 
 .PHONY: install-docker check-env deploy deploy-test cn passwords
@@ -33,18 +34,18 @@ check-env:
 		echo "ERROR: METRICS_PWD is not set. Please create .env file from env.example and set METRICS_PWD value"; \
 		exit 1; \
 	fi
-	@echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT)"
+	@echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT), Hysteria2-v2: $(HYSTERIA2_V2_PORT)"
 
 deploy: check-env
-	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$(METRICS_PWD)"
+	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$(METRICS_PWD)"
 
 
 cfgapp-dev:
 	@cfg_path=$$(pwd)/config.json; \
-	cd vpn/cfgapp && BASE_URL=$(BASE_URL) OBFS_PASSWORD=$(OBFS_PASSWORD) PROXY_CONFIG=$$cfg_path HYSTERIA2_PORT=$(HYSTERIA2_PORT) SALT=$(SALT) CONFIG_HOST=$(CONFIG_HOST) .venv/bin/poetry run python -m src.main
+	cd vpn/cfgapp && BASE_URL=$(BASE_URL) OBFS_PASSWORD=$(OBFS_PASSWORD) PROXY_CONFIG=$$cfg_path HYSTERIA2_PORT=$(HYSTERIA2_PORT) HYSTERIA2_V2_PORT=$(HYSTERIA2_V2_PORT) SALT=$(SALT) CONFIG_HOST=$(CONFIG_HOST) .venv/bin/poetry run python -m src.main
 
 deploy-test:
-	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-0 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$(METRICS_PWD)"
+	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-0 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$(METRICS_PWD)"
 
 cn:
 	@echo "Generating hash for: $(NAME)"
@@ -67,7 +68,7 @@ cn:
 passwords:
 	@set -e; \
 	if [ -z "$(SALT)" ]; then echo "ERROR: SALT is not set. Create .env from env.example and set SALT"; exit 1; fi; \
-	echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT)"; \
+	echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT), Hysteria2-v2: $(HYSTERIA2_V2_PORT)"; \
 	if command -v sha256sum >/dev/null 2>&1; then HASH="sha256sum"; \
 	elif command -v shasum >/dev/null 2>&1; then HASH="shasum -a 256"; \
 	else echo "ERROR: sha256 utility not found (install coreutils or use shasum)"; exit 1; fi; \

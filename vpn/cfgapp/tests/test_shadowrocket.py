@@ -37,6 +37,12 @@ class TestShadowRocketSubscription:
                         "host": "sg-1.linode.v.dimonb.com",
                     }
                 },
+                "v2": {
+                    "DE_1_CONTABO_V2": {
+                        "protocol": "hy2-v2",
+                        "host": "de-1.contabo.v.dimonb.com",
+                    },
+                },
             },
         }
 
@@ -234,3 +240,60 @@ class TestShadowRocketSubscription:
         assert query_params["type"] == ["ws"]
         assert query_params["path"] == ["/ws"]
         assert query_params["security"] == ["tls"]
+
+    @patch("src.proxy_config.settings")
+    def test_generate_shadowrocket_subscription_v2(
+        self, mock_settings, config_file: Path
+    ) -> None:
+        """Test ShadowRocket subscription generation for v2 subscription."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_v2_port = 47013
+
+        proxy_config = ProxyConfig(str(config_file))
+        subscription_b64 = proxy_config.generate_shadowrocket_subscription("v2", "test-password", "testuser")
+
+        # Decode base64 to check content
+        subscription_content = base64.b64decode(subscription_b64).decode()
+        urls = subscription_content.strip().split("\n")
+
+        # Should have 1 URL (one per proxy)
+        assert len(urls) == 1
+
+        # Check Hysteria2 v2 URL
+        hy2_urls = [url for url in urls if url.startswith("hysteria2://")]
+        assert len(hy2_urls) == 1
+        hy2_url = hy2_urls[0]
+
+        # Parse Hysteria2 v2 URL
+        assert "de-1.contabo.v.dimonb.com:47013" in hy2_url
+        assert "peer=i.am.com" in hy2_url
+        assert "obfs-password=test-obfs-password" in hy2_url
+        assert "#de_1_contabo_v2.hy2" in hy2_url
+        # Check that password is in user:password format
+        assert "testuser:test-password@" in hy2_url
+
+    @patch("src.proxy_config.settings")
+    def test_generate_hysteria2_v2_url(self, mock_settings, config_file: Path) -> None:
+        """Test Hysteria2 v2 URL generation."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_v2_port = 47013
+
+        proxy_config = ProxyConfig(str(config_file))
+        config = {
+            "name": "test_proxy",
+            "type": "hysteria2",
+            "server": "test.host.com",
+            "port": 47013,
+            "password": "test-password",
+            "obfs-password": "test-obfs-password",
+        }
+
+        url = proxy_config._generate_hysteria2_v2_url(config, "user:password")
+
+        expected_url = (
+            "hysteria2://user:password@test.host.com:47013?"
+            "peer=i.am.com&insecure=1&alpn=h3&obfs=salamander&"
+            "obfs-password=test-obfs-password&udp=1#test_proxy.hy2"
+        )
+
+        assert url == expected_url

@@ -86,13 +86,14 @@ class ProxyConfig:
         return subs.get(sub_name, {})
 
     def generate_proxy_configs(
-        self, sub_name: str | None = None, password: str | None = None
+        self, sub_name: str | None = None, password: str | None = None, user: str | None = None
     ) -> list[dict[str, Any]]:
         """Generate proxy configurations for all protocols in subscription.
 
         Args:
             sub_name: Subscription name, defaults to 'default'
             password: Password from query parameter (optional)
+            user: Username for authentication (optional)
 
         Returns:
             List of proxy configurations (one per proxy in subscription)
@@ -110,7 +111,7 @@ class ProxyConfig:
 
             # Generate one config per proxy (not per user)
             proxy_config = self._generate_proxy_config(
-                protocol, host, proxy_name, password
+                protocol, host, proxy_name, password, user
             )
             if proxy_config:
                 proxy_configs.append(proxy_config)
@@ -121,21 +122,24 @@ class ProxyConfig:
         return proxy_configs
 
     def _generate_proxy_config(
-        self, protocol: str, host: str, proxy_name: str, password: str | None = None
+        self, protocol: str, host: str, proxy_name: str, password: str | None = None, user: str | None = None
     ) -> dict[str, Any]:
         """Generate proxy configuration for specific protocol.
 
         Args:
-            protocol: Proxy protocol (e.g., 'hy2', 'vmess', etc.)
+            protocol: Proxy protocol (e.g., 'hy2', 'hy2-v2', 'vmess', etc.)
             host: Proxy host
             proxy_name: Proxy name
             password: Password from query parameter (optional)
+            user: Username for authentication (optional)
 
         Returns:
             Proxy configuration dictionary
         """
         if protocol == "hy2":
             return self._generate_hysteria2_config(host, proxy_name, password)
+        elif protocol == "hy2-v2":
+            return self._generate_hysteria2_v2_config(host, proxy_name, password, user)
         elif protocol == "vmess":
             return self._generate_vmess_config(host, proxy_name)
         elif protocol == "vless":
@@ -167,6 +171,52 @@ class ProxyConfig:
             proxy_password = self._generate_password(proxy_name)
 
         port = settings.hysteria2_port  # Use fixed port from environment variable
+
+        return {
+            "name": name,
+            "type": "hysteria2",
+            "server": host,
+            "port": port,
+            "password": proxy_password,
+            "sni": "i.am.com",
+            "skip-cert-verify": True,
+            "alpn": ["h3"],
+            "up": 50,
+            "down": 200,
+            "obfs": "salamander",
+            "obfs-password": settings.obfs_password,
+            "fast-open": True,
+            "udp": True,
+        }
+
+    def _generate_hysteria2_v2_config(
+        self, host: str, proxy_name: str, password: str | None = None, user: str | None = None
+    ) -> dict[str, Any]:
+        """Generate Hysteria2 v2 proxy configuration.
+
+        Args:
+            host: Proxy host
+            proxy_name: Proxy name
+            password: Password from query parameter (optional)
+            user: Username for authentication (optional)
+
+        Returns:
+            Hysteria2 v2 configuration dictionary
+        """
+        # Generate unique name
+        name = f"{proxy_name.lower()}"
+
+        # Use provided password or generate one
+        if password:
+            # For hy2-v2 in Clash configs, use user:password format if user is provided
+            if user:
+                proxy_password = f"{user}:{password}"
+            else:
+                proxy_password = password
+        else:
+            proxy_password = self._generate_password(proxy_name)
+
+        port = settings.hysteria2_v2_port  # Use v2 port from environment variable
 
         return {
             "name": name,
@@ -305,13 +355,14 @@ class ProxyConfig:
         return [config["name"] for config in proxy_configs]
 
     def generate_shadowrocket_subscription(
-        self, sub_name: str | None = None, password: str | None = None
+        self, sub_name: str | None = None, password: str | None = None, user: str | None = None
     ) -> str:
         """Generate ShadowRocket subscription URLs.
 
         Args:
             sub_name: Subscription name, defaults to 'default'
             password: Password from query parameter (optional)
+            user: Username for authentication (optional)
 
         Returns:
             Base64 encoded subscription URLs
@@ -322,7 +373,13 @@ class ProxyConfig:
         for config in proxy_configs:
             protocol = config.get("type", "")
             if protocol == "hysteria2":
-                url = self._generate_hysteria2_url(config)
+                # Check if this is hy2-v2 by looking at the port
+                if config.get("port") == settings.hysteria2_v2_port:
+                    # For hy2-v2, create user:password format
+                    user_password = f"{user}:{password}" if user and password else password
+                    url = self._generate_hysteria2_v2_url(config, user_password)
+                else:
+                    url = self._generate_hysteria2_url(config)
             elif protocol == "vmess":
                 url = self._generate_vmess_url(config)
             elif protocol == "vless":
@@ -364,6 +421,42 @@ class ProxyConfig:
 
         query_string = urllib.parse.urlencode(params)
         return f"hysteria2://{password}@{server}:{port}?{query_string}#{name}.hy2"
+
+    def _generate_hysteria2_v2_url(self, config: dict[str, Any], user_password: str | None = None) -> str:
+        """Generate Hysteria2 v2 URL for ShadowRocket with user:password format.
+
+        Args:
+            config: Hysteria2 v2 configuration
+            user_password: User password in format "user:password" (optional)
+
+        Returns:
+            Hysteria2 v2 URL string
+        """
+        password = config["password"]
+        server = config["server"]
+        port = config["port"]
+        name = config["name"]
+
+        # For hy2-v2, use user:password format if user_password is provided
+        if user_password and ":" in user_password:
+            # user_password is already in "user:password" format
+            auth_password = user_password
+        else:
+            # Fallback to regular password
+            auth_password = password
+
+        # Build query parameters
+        params = {
+            "peer": "i.am.com",
+            "insecure": "1",
+            "alpn": "h3",
+            "obfs": "salamander",
+            "obfs-password": config["obfs-password"],
+            "udp": "1",
+        }
+
+        query_string = urllib.parse.urlencode(params)
+        return f"hysteria2://{auth_password}@{server}:{port}?{query_string}#{name}.hy2"
 
     def _generate_vmess_url(self, config: dict[str, Any]) -> str:
         """Generate VMess URL for ShadowRocket.

@@ -102,10 +102,11 @@ async def shadowrocket_subscription(request: Request):
         query_params = dict(request.query_params)
         sub_name = query_params.get("sub")
         password = query_params.get("hash")
+        user = query_params.get("u")
 
         # Generate ShadowRocket subscription
         subscription_b64 = proxy_config.generate_shadowrocket_subscription(
-            sub_name, password
+            sub_name, password, user
         )
 
         return Response(

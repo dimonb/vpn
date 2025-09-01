@@ -1,5 +1,5 @@
 {% set config = lookup('file', 'config.json') | from_json %}
-listen: :{{ (hysteria2_port | int) + 1 | default(47013) }}
+listen: :{{ hysteria2_v2_port | default(47013) }}
 
 tls:
   cert: /cert/cert.pem

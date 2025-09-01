@@ -30,6 +30,12 @@ class TestProxyConfig:
                         "host": "us-1.vultr.v.dimonb.com",
                     },
                 },
+                "v2": {
+                    "DE_1_CONTABO_V2": {
+                        "protocol": "hy2-v2",
+                        "host": "de-1.contabo.v.dimonb.com",
+                    },
+                },
                 "premium": {
                     "SG_1_LINODE": {
                         "protocol": "vless",
@@ -101,6 +107,13 @@ class TestProxyConfig:
         assert "SG_1_LINODE" in proxies
         assert len(proxies) == 1
 
+    def test_get_subscription_proxies_v2(self, config_file: Path) -> None:
+        """Test getting v2 subscription proxies."""
+        proxy_config = ProxyConfig(str(config_file))
+        proxies = proxy_config.get_subscription_proxies("v2")
+        assert "DE_1_CONTABO_V2" in proxies
+        assert len(proxies) == 1
+
     def test_get_subscription_proxies_nonexistent(self, config_file: Path) -> None:
         """Test getting nonexistent subscription proxies."""
         proxy_config = ProxyConfig(str(config_file))
@@ -136,6 +149,41 @@ class TestProxyConfig:
         for config in configs:
             assert config["type"] == "vless"
             assert "sg_1_linode" in config["name"]
+
+    @patch("src.proxy_config.settings")
+    def test_generate_proxy_configs_v2(self, mock_settings, config_file: Path) -> None:
+        """Test proxy configuration generation for v2 subscription."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_v2_port = 47013
+        proxy_config = ProxyConfig(str(config_file))
+        configs = proxy_config.generate_proxy_configs("v2")
+
+        # Should generate configs for 1 proxy (one per proxy, not per user)
+        assert len(configs) == 1
+
+        # Check that all configs are Hysteria2 v2
+        for config in configs:
+            assert config["type"] == "hysteria2"
+            assert config["port"] == 47013  # v2 port
+            assert "de_1_contabo_v2" in config["name"]
+
+    @patch("src.proxy_config.settings")
+    def test_generate_proxy_configs_v2_with_user(self, mock_settings, config_file: Path) -> None:
+        """Test proxy configuration generation for v2 subscription with user."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_v2_port = 47013
+        proxy_config = ProxyConfig(str(config_file))
+        configs = proxy_config.generate_proxy_configs("v2", "test-password", "testuser")
+
+        # Should generate configs for 1 proxy (one per proxy, not per user)
+        assert len(configs) == 1
+
+        # Check that all configs are Hysteria2 v2 with user:password format
+        for config in configs:
+            assert config["type"] == "hysteria2"
+            assert config["port"] == 47013  # v2 port
+            assert "de_1_contabo_v2" in config["name"]
+            assert config["password"] == "testuser:test-password"  # user:password format
 
     @patch("src.proxy_config.settings")
     def test_generate_hysteria2_config_with_password(
@@ -178,6 +226,80 @@ class TestProxyConfig:
         assert "password" in config  # Generated password
         assert config["password"] != "custom-password-123"  # Should be different
         assert config["port"] == 47012  # Fixed port from environment
+        assert config["skip-cert-verify"] is True
+        assert config["alpn"] == ["h3"]
+        assert config["obfs"] == "salamander"
+        assert config["obfs-password"] == "test-obfs-password"
+        assert config["sni"] == "i.am.com"
+        assert config["up"] == 50
+        assert config["down"] == 200
+
+    @patch("src.proxy_config.settings")
+    def test_generate_hysteria2_v2_config_with_password(
+        self, mock_settings, config_file: Path
+    ) -> None:
+        """Test Hysteria2 v2 configuration generation with provided password."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_v2_port = 47013
+        proxy_config = ProxyConfig(str(config_file))
+        config = proxy_config._generate_hysteria2_v2_config(
+            "test.host.com", "TEST_PROXY", "custom-password-123"
+        )
+
+        assert config["type"] == "hysteria2"
+        assert config["server"] == "test.host.com"
+        assert config["name"] == "test_proxy"
+        assert config["password"] == "custom-password-123"  # Use provided password
+        assert config["port"] == 47013  # v2 port from environment
+        assert config["skip-cert-verify"] is True
+        assert config["alpn"] == ["h3"]
+        assert config["obfs"] == "salamander"
+        assert config["obfs-password"] == "test-obfs-password"
+        assert config["sni"] == "i.am.com"
+        assert config["up"] == 50
+        assert config["down"] == 200
+
+    @patch("src.proxy_config.settings")
+    def test_generate_hysteria2_v2_config_with_password_and_user(
+        self, mock_settings, config_file: Path
+    ) -> None:
+        """Test Hysteria2 v2 configuration generation with provided password and user."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_v2_port = 47013
+        proxy_config = ProxyConfig(str(config_file))
+        config = proxy_config._generate_hysteria2_v2_config(
+            "test.host.com", "TEST_PROXY", "custom-password-123", "testuser"
+        )
+
+        assert config["type"] == "hysteria2"
+        assert config["server"] == "test.host.com"
+        assert config["name"] == "test_proxy"
+        assert config["password"] == "testuser:custom-password-123"  # Use user:password format
+        assert config["port"] == 47013  # v2 port from environment
+        assert config["skip-cert-verify"] is True
+        assert config["alpn"] == ["h3"]
+        assert config["obfs"] == "salamander"
+        assert config["obfs-password"] == "test-obfs-password"
+        assert config["sni"] == "i.am.com"
+        assert config["up"] == 50
+        assert config["down"] == 200
+
+    @patch("src.proxy_config.settings")
+    def test_generate_hysteria2_v2_config_without_password(
+        self, mock_settings, config_file: Path
+    ) -> None:
+        """Test Hysteria2 v2 configuration generation without provided password."""
+        mock_settings.obfs_password = "test-obfs-password"
+        mock_settings.hysteria2_v2_port = 47013
+        proxy_config = ProxyConfig(str(config_file))
+        config = proxy_config._generate_hysteria2_v2_config("test.host.com", "TEST_PROXY")
+
+        assert config["type"] == "hysteria2"
+        assert config["server"] == "test.host.com"
+        assert config["name"] == "test_proxy"
+        assert "password" in config  # Generated password
+        assert config["password"] != "custom-password-123"  # Should be different
+        assert config["port"] == 47013  # v2 port from environment
         assert config["skip-cert-verify"] is True
         assert config["alpn"] == ["h3"]
         assert config["obfs"] == "salamander"

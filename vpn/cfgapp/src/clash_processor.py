@@ -125,11 +125,12 @@ class ClashProcessor:
             return clash_config
 
         try:
-            # Extract sub parameter and hash from headers (if available)
+            # Extract sub parameter, hash, and user from headers (if available)
             sub_name = None
             password = None
+            user = None
             if "x-query-string" in request_headers:
-                # Parse query string to find 'sub' and 'hash' parameters
+                # Parse query string to find 'sub', 'hash', and 'u' parameters
                 import urllib.parse
 
                 query_string = request_headers["x-query-string"]
@@ -140,6 +141,9 @@ class ClashProcessor:
                 if "hash" in query_params:
                     password = query_params["hash"][0]
                     logger.info("Using password from hash parameter")
+                if "u" in query_params:
+                    user = query_params["u"][0]
+                    logger.info(f"Using user: {user}")
 
             # Replace PROXY_CONFIGS in proxies section
             if "proxies" in clash_config:
@@ -150,7 +154,7 @@ class ClashProcessor:
                     and proxies[0] == "PROXY_CONFIGS"
                 ):
                     proxy_configs = self.proxy_config.generate_proxy_configs(
-                        sub_name, password
+                        sub_name, password, user
                     )
                     clash_config["proxies"] = proxy_configs
                     logger.info(
