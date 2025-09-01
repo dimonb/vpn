@@ -59,9 +59,10 @@
         - { src: './vpn/sing-box.json.j2', dest: 'sing-box.json', mode: '0644' }
         - { src: './vpn/docker-compose.yml.j2', dest: 'docker-compose.yml', mode: '0644' }
         - { src: './vpn/Caddyfile.j2', dest: 'Caddyfile', mode: '0644' }
-
+        - { src: './vpn/hysteria.yaml.j2', dest: 'hysteria.yaml', mode: '0644' }
+        
     - name: Run Docker Compose
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"
-        cmd: docker compose build && docker compose down && docker compose up --pull always --remove-orphans --force-recreate -d 
-
+        cmd: docker compose build && docker compose up --pull always --remove-orphans --force-recreate -d 
+#docker compose down && 

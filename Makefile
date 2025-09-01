@@ -44,7 +44,7 @@ cfgapp-dev:
 	cd vpn/cfgapp && BASE_URL=$(BASE_URL) OBFS_PASSWORD=$(OBFS_PASSWORD) PROXY_CONFIG=$$cfg_path HYSTERIA2_PORT=$(HYSTERIA2_PORT) SALT=$(SALT) CONFIG_HOST=$(CONFIG_HOST) .venv/bin/poetry run python -m src.main
 
 deploy-test:
-	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-1 deploy_v2ray.yml
+	ansible-playbook -i servers.cfg --ssh-extra-args='-o ControlPersist=60s' -f 4 --limit de-0 deploy_vpn.yml -e "salt=$(SALT)" -e "obfs_password=$(OBFS_PASSWORD)" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$(METRICS_PWD)"
 
 cn:
 	@echo "Generating hash for: $(NAME)"

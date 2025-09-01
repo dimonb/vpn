@@ -1,0 +1,22 @@
+{% set config = lookup('file', 'config.json') | from_json %}
+listen: :{{ (hysteria2_port | int) + 1 | default(47013) }}
+
+tls:
+  cert: /cert/cert.pem
+  key: /cert/key.pem
+  sniGuard: disable
+
+auth:
+  type: userpass
+  userpass:
+  {% for user in config.users %}
+    {{ user }}: {{ (user + '.' + salt) | hash('sha256') }}
+  {% endfor %}
+    
+obfs:
+  type: salamander
+  salamander:
+    password: {{ obfs_password }}
+
+trafficStats:
+  listen: 127.0.0.1:8451

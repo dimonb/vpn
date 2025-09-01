@@ -7,6 +7,14 @@ services:
     volumes:
       - ./sing-box.json:/etc/sing-box/config.json
       - ./cert:/etc/xray/certs
+  hysteria:
+    image: tobyxdd/hysteria
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./cert:/cert
+      - ./hysteria.yaml:/etc/hysteria.yaml
+    command: ["server", "-c", "/etc/hysteria.yaml"]
   proxy:
     image: caddy
     restart: unless-stopped
