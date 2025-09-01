@@ -1,0 +1,42 @@
+---
+- name: Perform do-release-upgrade on Ubuntu Servers
+  hosts: vpn  # Change to your host group or individual hosts
+  become: yes
+  tasks:
+    - name: Install updates
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - update-manager-core
+          - screen
+        state: present
+
+    - name: Check if a release upgrade is available
+      shell: do-release-upgrade -c
+      register: check_upgrade
+      ignore_errors: true
+
+    - name: Perform the release upgrade
+      shell: screen -d -m do-release-upgrade -f DistUpgradeViewNonInteractive
+      when: check_upgrade.stdout is search("New release")
+
+    - name: Wait for server to reboot
+      wait_for_connection:
+        delay: 60
+        timeout: 300
+
+    - name: Recheck status after reboot
+      command: lsb_release -a
+      register: upgrade_result
+      changed_when: false
+
+    - name: Display upgrade result
+      debug:
+        var: upgrade_result.stdout_lines
+
