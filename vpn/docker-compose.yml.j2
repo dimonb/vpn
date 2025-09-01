@@ -23,6 +23,18 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - ./caddy:/data/
       - ./logs:/logs/
+
+  # Catawiki json_exporter
+  json-exporter:
+    image: dimonb/json_exporter:latest
+    network_mode: host
+    volumes:
+      - ./json-exporter.yml:/config.yml:ro
+    command: >
+      -p 7979
+      -l 127.0.0.1
+      /config.yml
+    restart: unless-stopped
   cfgapp:
     build:
       context: ./cfgapp

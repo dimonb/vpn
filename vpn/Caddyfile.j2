@@ -46,6 +46,15 @@ http://{{ ansible_host }}:{{ http_port | default(80) }} {
   basicauth @node {
     metrics {{ metrics_pwd | password_hash('bcrypt') }}
   }
+
+  @hy2 path /hy2/metrics*
+  handle @hy2 {
+    rewrite * /metrics
+    reverse_proxy 127.0.0.1:7979
+  }
+  basicauth @hy2 {
+    metrics {{ metrics_pwd | password_hash('bcrypt') }}
+  }
 }
 
 

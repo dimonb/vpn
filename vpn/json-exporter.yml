@@ -1,0 +1,14 @@
+# json-exporter.yml  (Catawiki json_exporter)
+targets:
+  - name: hy2
+    url: http://127.0.0.1:8451/traffic
+    rules:
+      - name: hy2_user_${dir}_bytes
+        # Берём корень и выбираем все поля вида user.field
+        object_path: $
+        metric_path: $.*.*
+        metric_type: gauge
+        # Из пути "<user>.<dir>" вытаскиваем user и dir (tx|rx)
+        regex: (?P<user>[^.]+)\.(?P<dir>tx|rx)
+        static_labels:
+          user: $user
