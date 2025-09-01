@@ -1,4 +1,4 @@
-{% set config = lookup('file', 'config.json') | from_json %}
+{% set config = lookup('file', config_file | default('config.json')) | from_json %}
 {
   "log": { "level": "info" },
   "inbounds": [

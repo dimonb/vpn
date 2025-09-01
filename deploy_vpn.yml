@@ -55,7 +55,7 @@
         group: "{{ config_group }}"
         mode: "{{ item.mode }}"
       loop:
-        - { src: './config.json', dest: 'config.json', mode: '0644' }
+        - { src: "{{ config_file | default('./config.json') }}", dest: 'config.json', mode: '0644' }
         - { src: './vpn/sing-box.json.j2', dest: 'sing-box.json', mode: '0644' }
         - { src: './vpn/docker-compose.yml.j2', dest: 'docker-compose.yml', mode: '0644' }
         - { src: './vpn/Caddyfile.j2', dest: 'Caddyfile', mode: '0644' }

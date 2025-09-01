@@ -1,4 +1,4 @@
-{% set config = lookup('file', 'config.json') | from_json %}
+{% set config = lookup('file', config_file | default('config.json')) | from_json %}
 listen: :{{ hysteria2_v2_port | default(47013) }}
 
 tls:
