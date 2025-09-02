@@ -80,7 +80,7 @@ class TestShadowRocketSubscription:
         assert "de-1.contabo.v.dimonb.com:47012" in hy2_url
         assert "peer=i.am.com" in hy2_url
         assert "obfs-password=test-obfs-password" in hy2_url
-        assert "#de_1_contabo.hy2" in hy2_url
+        assert "#de_1_contabo" in hy2_url
 
         # Check VMess URL
         vmess_urls = [url for url in urls if url.startswith("vmess://")]
@@ -107,6 +107,9 @@ class TestShadowRocketSubscription:
         """Test ShadowRocket subscription generation for premium subscription."""
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_port = 47012
+        mock_settings.vless_port = 8443
+        mock_settings.reality_public_key = "test-public-key"
+        mock_settings.reality_short_id = "test-short-id"
 
         proxy_config = ProxyConfig(str(config_file))
         subscription_b64 = proxy_config.generate_shadowrocket_subscription("premium")
@@ -125,9 +128,10 @@ class TestShadowRocketSubscription:
 
         # Parse VLESS URL
         assert "sg-1.linode.v.dimonb.com" in vless_url
-        assert "type=ws" in vless_url
-        assert "security=tls" in vless_url
-        assert "#sg_1_linode" in vless_url
+        assert "tls=1" in vless_url
+        assert "peer=www.google.com" in vless_url
+        assert "alpn=h2%2Chttp%2F1.1" in vless_url  # URL-encoded comma
+        assert "xtls=2" in vless_url
 
     @patch("src.proxy_config.settings")
     def test_generate_shadowrocket_subscription_with_password(
@@ -177,7 +181,7 @@ class TestShadowRocketSubscription:
         expected_url = (
             "hysteria2://test-password@test.host.com:47012?"
             "peer=i.am.com&insecure=1&alpn=h3&obfs=salamander&"
-            "obfs-password=test-obfs-password&udp=1#test_proxy.hy2"
+            "obfs-password=test-obfs-password&udp=1&fragment=1%2C40-60%2C30-50#test_proxy"
         )
 
         assert url == expected_url
@@ -215,6 +219,9 @@ class TestShadowRocketSubscription:
     @patch("src.proxy_config.settings")
     def test_generate_vless_url(self, mock_settings, config_file: Path) -> None:
         """Test VLESS URL generation."""
+        mock_settings.vless_port = 8443
+        mock_settings.reality_public_key = "test-public-key"
+        mock_settings.reality_short_id = "test-short-id"
         proxy_config = ProxyConfig(str(config_file))
         config = {
             "name": "test_proxy",
@@ -234,12 +241,18 @@ class TestShadowRocketSubscription:
         assert parsed.username == "12345678-1234-1234-1234-123456789abc"
         assert parsed.hostname == "test.host.com"
         assert parsed.port == 8080
-        assert parsed.fragment == "test_proxy"
+        assert parsed.fragment == ""
 
         # Check query parameters
-        assert query_params["type"] == ["ws"]
-        assert query_params["path"] == ["/ws"]
-        assert query_params["security"] == ["tls"]
+        assert query_params["remarks"] == ["test_proxy"]
+        assert query_params["tls"] == ["1"]
+        assert query_params["peer"] == ["www.google.com"]
+        assert query_params["alpn"] == ["h2,http/1.1"]
+        assert query_params["xtls"] == ["2"]
+        assert query_params["pbk"] == ["test-public-key"]
+        assert query_params["sid"] == ["test-short-id"]
+
+
 
     @patch("src.proxy_config.settings")
     def test_generate_shadowrocket_subscription_v2(
@@ -250,7 +263,9 @@ class TestShadowRocketSubscription:
         mock_settings.hysteria2_v2_port = 47013
 
         proxy_config = ProxyConfig(str(config_file))
-        subscription_b64 = proxy_config.generate_shadowrocket_subscription("v2", "test-password", "testuser")
+        subscription_b64 = proxy_config.generate_shadowrocket_subscription(
+            "v2", "test-password", "testuser"
+        )
 
         # Decode base64 to check content
         subscription_content = base64.b64decode(subscription_b64).decode()
@@ -268,7 +283,7 @@ class TestShadowRocketSubscription:
         assert "de-1.contabo.v.dimonb.com:47013" in hy2_url
         assert "peer=i.am.com" in hy2_url
         assert "obfs-password=test-obfs-password" in hy2_url
-        assert "#de_1_contabo_v2.hy2" in hy2_url
+        assert "#de_1_contabo_v2" in hy2_url
         # Check that password is in user:password format
         assert "testuser:test-password@" in hy2_url
 
@@ -277,6 +292,9 @@ class TestShadowRocketSubscription:
         """Test Hysteria2 v2 URL generation."""
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_v2_port = 47013
+        mock_settings.vless_port = 8443
+        mock_settings.reality_public_key = "test-public-key"
+        mock_settings.reality_short_id = "test-short-id"
 
         proxy_config = ProxyConfig(str(config_file))
         config = {
@@ -293,7 +311,7 @@ class TestShadowRocketSubscription:
         expected_url = (
             "hysteria2://user:password@test.host.com:47013?"
             "peer=i.am.com&insecure=1&alpn=h3&obfs=salamander&"
-            "obfs-password=test-obfs-password&udp=1#test_proxy.hy2"
+            "obfs-password=test-obfs-password&udp=1&fragment=1%2C40-60%2C30-50#test_proxy"
         )
 
         assert url == expected_url

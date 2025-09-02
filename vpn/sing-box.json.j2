@@ -26,6 +26,40 @@
         "certificate_path": "/etc/xray/certs/cert.pem",
         "key_path": "/etc/xray/certs/key.pem"
       }
+    },
+    {
+      "type": "vless",
+      "tag": "vless-in",
+      "listen": "0.0.0.0",
+      "listen_port": {{ vless_port | default(8443) }},
+      "sniff": true,
+      "sniff_override_destination": true,
+      "domain_strategy": "prefer_ipv4",
+      "users": [
+        {% for user in config.users %}
+        {
+          "name": "{{ user }}",
+          "uuid": "{{ (user + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}",
+          "flow": "xtls-rprx-vision"
+        }
+        {% if not loop.last %},{% endif %}
+        {% endfor %}
+      ],
+      "tls": {
+        "enabled": true,
+        "alpn": [],
+        "server_name": "www.google.com",
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "www.google.com",
+            "server_port": 443
+          },
+          "private_key": "{{ reality_private_key | default('') }}",
+          "short_id": ["{{ reality_short_id | default('c047f3e99c90ff71') }}"],
+          "max_time_difference": "10m"
+        }
+      }
     }
   ],
   "outbounds": [{ "type": "direct" }]

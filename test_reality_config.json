@@ -1,0 +1,11 @@
+{
+  "users": ["dimonb"],
+  "subs": {
+    "reality": {
+      "RU_0_YANDEX": {
+        "protocol": "vless",
+        "host": "ru-1.yandex.v.dimonb.com"
+      }
+    }
+  }
+}

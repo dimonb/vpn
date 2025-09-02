@@ -144,7 +144,9 @@ async def subscription_page(request: Request):
         # Get base URL from settings or fallback to request
         base_url = settings.base_url
         if not base_url:
-            base_url = f"{request.url.scheme}://{request.headers.get('host', 'localhost')}"
+            base_url = (
+                f"{request.url.scheme}://{request.headers.get('host', 'localhost')}"
+            )
 
         # Generate subscription URL
         subscription_url = proxy_config.generate_subscription_url(

@@ -168,7 +168,9 @@ class TestProxyConfig:
             assert "de_1_contabo_v2" in config["name"]
 
     @patch("src.proxy_config.settings")
-    def test_generate_proxy_configs_v2_with_user(self, mock_settings, config_file: Path) -> None:
+    def test_generate_proxy_configs_v2_with_user(
+        self, mock_settings, config_file: Path
+    ) -> None:
         """Test proxy configuration generation for v2 subscription with user."""
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_v2_port = 47013
@@ -183,7 +185,9 @@ class TestProxyConfig:
             assert config["type"] == "hysteria2"
             assert config["port"] == 47013  # v2 port
             assert "de_1_contabo_v2" in config["name"]
-            assert config["password"] == "testuser:test-password"  # user:password format
+            assert (
+                config["password"] == "testuser:test-password"
+            )  # user:password format
 
     @patch("src.proxy_config.settings")
     def test_generate_hysteria2_config_with_password(
@@ -218,7 +222,9 @@ class TestProxyConfig:
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_port = 47012
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_hysteria2_config("test.host.com", "TEST_PROXY")
+        config = proxy_config._generate_hysteria2_config(
+            "test.host.com", "TEST_PROXY", None
+        )
 
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
@@ -274,7 +280,9 @@ class TestProxyConfig:
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
-        assert config["password"] == "testuser:custom-password-123"  # Use user:password format
+        assert (
+            config["password"] == "testuser:custom-password-123"
+        )  # Use user:password format
         assert config["port"] == 47013  # v2 port from environment
         assert config["skip-cert-verify"] is True
         assert config["alpn"] == ["h3"]
@@ -292,7 +300,9 @@ class TestProxyConfig:
         mock_settings.obfs_password = "test-obfs-password"
         mock_settings.hysteria2_v2_port = 47013
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_hysteria2_v2_config("test.host.com", "TEST_PROXY")
+        config = proxy_config._generate_hysteria2_v2_config(
+            "test.host.com", "TEST_PROXY"
+        )
 
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
@@ -321,18 +331,30 @@ class TestProxyConfig:
         assert config["tls"] is True
         assert config["cipher"] == "auto"
 
-    def test_generate_vless_config(self, config_file: Path) -> None:
+    @patch("src.proxy_config.settings")
+    def test_generate_vless_config(self, mock_settings, config_file: Path) -> None:
         """Test VLESS configuration generation."""
+        mock_settings.vless_port = 8443
+        mock_settings.reality_public_key = "test-public-key"
+        mock_settings.reality_short_id = "test-short-id"
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_vless_config("test.host.com", "TEST_PROXY")
+        config = proxy_config._generate_vless_config(
+            "test.host.com", "TEST_PROXY", "testuser"
+        )
 
         assert config["type"] == "vless"
         assert config["server"] == "test.host.com"
         assert config["name"] == "test_proxy"
         assert "uuid" in config
         assert "port" in config
-        assert config["tls"] is True
-        assert config["network"] == "ws"
+        assert config["security"] == "reality"
+        assert config["network"] == "grpc"
+        assert "reality-opts" in config
+        assert config["reality-opts"]["public-key"] == "test-public-key"
+        assert config["reality-opts"]["short-id"] == "test-short-id"
+        assert config["reality-opts"]["server-name"] == "www.google.com"
+
+
 
     def test_get_proxy_list_default(self, config_file: Path) -> None:
         """Test getting proxy list for default subscription."""
@@ -362,7 +384,7 @@ class TestProxyConfig:
         """Test handling of unsupported protocols."""
         proxy_config = ProxyConfig(str(config_file))
         config = proxy_config._generate_proxy_config(
-            "unsupported", "test.host.com", "TEST"
+            "unsupported", "test.host.com", "TEST", None, None
         )
         assert config == {}
 

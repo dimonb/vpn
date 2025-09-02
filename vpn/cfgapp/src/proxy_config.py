@@ -86,7 +86,10 @@ class ProxyConfig:
         return subs.get(sub_name, {})
 
     def generate_proxy_configs(
-        self, sub_name: str | None = None, password: str | None = None, user: str | None = None
+        self,
+        sub_name: str | None = None,
+        password: str | None = None,
+        user: str | None = None,
     ) -> list[dict[str, Any]]:
         """Generate proxy configurations for all protocols in subscription.
 
@@ -122,7 +125,12 @@ class ProxyConfig:
         return proxy_configs
 
     def _generate_proxy_config(
-        self, protocol: str, host: str, proxy_name: str, password: str | None = None, user: str | None = None
+        self,
+        protocol: str,
+        host: str,
+        proxy_name: str,
+        password: str | None = None,
+        user: str | None = None,
     ) -> dict[str, Any]:
         """Generate proxy configuration for specific protocol.
 
@@ -143,7 +151,7 @@ class ProxyConfig:
         elif protocol == "vmess":
             return self._generate_vmess_config(host, proxy_name)
         elif protocol == "vless":
-            return self._generate_vless_config(host, proxy_name)
+            return self._generate_vless_config(host, proxy_name, user)
         else:
             logger.warning(f"Unsupported protocol: {protocol}")
             return {}
@@ -190,7 +198,11 @@ class ProxyConfig:
         }
 
     def _generate_hysteria2_v2_config(
-        self, host: str, proxy_name: str, password: str | None = None, user: str | None = None
+        self,
+        host: str,
+        proxy_name: str,
+        password: str | None = None,
+        user: str | None = None,
     ) -> dict[str, Any]:
         """Generate Hysteria2 v2 proxy configuration.
 
@@ -263,19 +275,33 @@ class ProxyConfig:
             "udp": True,
         }
 
-    def _generate_vless_config(self, host: str, proxy_name: str) -> dict[str, Any]:
+    def _generate_vless_config(
+        self, host: str, proxy_name: str, user: str | None = None
+    ) -> dict[str, Any]:
         """Generate VLESS proxy configuration.
 
         Args:
             host: Proxy host
             proxy_name: Proxy name
+            user: Username for authentication (optional)
 
         Returns:
             VLESS configuration dictionary
         """
         name = f"{proxy_name.lower()}"
-        uuid = self._generate_uuid(proxy_name)
-        port = self._generate_port(proxy_name)
+
+        # Generate UUID based on user + salt (same as server config)
+        if user:
+            import hashlib
+
+            base = f"{user}.{settings.salt}"
+            hash_val = hashlib.sha256(base.encode()).hexdigest()
+            # Convert to UUID format (8-4-4-4-12)
+            uuid = f"{hash_val[:8]}-{hash_val[8:12]}-{hash_val[12:16]}-{hash_val[16:20]}-{hash_val[20:32]}"
+        else:
+            uuid = self._generate_uuid(proxy_name)
+
+        port = settings.vless_port  # Use port from environment variable
 
         return {
             "name": name,
@@ -283,10 +309,16 @@ class ProxyConfig:
             "server": host,
             "port": port,
             "uuid": uuid,
-            "network": "ws",
-            "tls": True,
-            "servername": host,
-            "skip-cert-verify": True,
+            "network": "grpc",
+            "grpc-opts": {"grpc-service-name": "grpc"},
+            "security": "reality",
+            "reality-opts": {
+                "public-key": settings.reality_public_key
+                if hasattr(settings, "reality_public_key")
+                else "",
+                "short-id": settings.reality_short_id,
+                "server-name": "www.google.com",
+            },
             "udp": True,
         }
 
@@ -351,11 +383,14 @@ class ProxyConfig:
         Returns:
             List of proxy names
         """
-        proxy_configs = self.generate_proxy_configs(sub_name, password)
+        proxy_configs = self.generate_proxy_configs(sub_name, password, None)
         return [config["name"] for config in proxy_configs]
 
     def generate_shadowrocket_subscription(
-        self, sub_name: str | None = None, password: str | None = None, user: str | None = None
+        self,
+        sub_name: str | None = None,
+        password: str | None = None,
+        user: str | None = None,
     ) -> str:
         """Generate ShadowRocket subscription URLs.
 
@@ -367,7 +402,7 @@ class ProxyConfig:
         Returns:
             Base64 encoded subscription URLs
         """
-        proxy_configs = self.generate_proxy_configs(sub_name, password)
+        proxy_configs = self.generate_proxy_configs(sub_name, password, user)
         urls = []
 
         for config in proxy_configs:
@@ -376,7 +411,9 @@ class ProxyConfig:
                 # Check if this is hy2-v2 by looking at the port
                 if config.get("port") == settings.hysteria2_v2_port:
                     # For hy2-v2, create user:password format
-                    user_password = f"{user}:{password}" if user and password else password
+                    user_password = (
+                        f"{user}:{password}" if user and password else password
+                    )
                     url = self._generate_hysteria2_v2_url(config, user_password)
                 else:
                     url = self._generate_hysteria2_url(config)
@@ -417,12 +454,15 @@ class ProxyConfig:
             "obfs": "salamander",
             "obfs-password": config["obfs-password"],
             "udp": "1",
+            "fragment": "1,40-60,30-50",
         }
 
         query_string = urllib.parse.urlencode(params)
-        return f"hysteria2://{password}@{server}:{port}?{query_string}#{name}.hy2"
+        return f"hysteria2://{password}@{server}:{port}?{query_string}#{name}"
 
-    def _generate_hysteria2_v2_url(self, config: dict[str, Any], user_password: str | None = None) -> str:
+    def _generate_hysteria2_v2_url(
+        self, config: dict[str, Any], user_password: str | None = None
+    ) -> str:
         """Generate Hysteria2 v2 URL for ShadowRocket with user:password format.
 
         Args:
@@ -453,10 +493,11 @@ class ProxyConfig:
             "obfs": "salamander",
             "obfs-password": config["obfs-password"],
             "udp": "1",
+            "fragment": "1,40-60,30-50",
         }
 
         query_string = urllib.parse.urlencode(params)
-        return f"hysteria2://{auth_password}@{server}:{port}?{query_string}#{name}.hy2"
+        return f"hysteria2://{auth_password}@{server}:{port}?{query_string}#{name}"
 
     def _generate_vmess_url(self, config: dict[str, Any]) -> str:
         """Generate VMess URL for ShadowRocket.
@@ -503,20 +544,28 @@ class ProxyConfig:
         port = config["port"]
         name = config["name"]
 
-        # Build query parameters
+        # Build query parameters for Reality protocol
         params = {
-            "type": "ws",
-            "path": "/ws",
-            "host": server,
-            "security": "tls",
-            "sni": server,
+            "remarks": name,
+            "tls": "1",
+            "peer": "www.google.com",
+            "alpn": "h2,http/1.1",
+            "xtls": "2",
+            "pbk": settings.reality_public_key
+            if hasattr(settings, "reality_public_key")
+            else "",
+            "sid": settings.reality_short_id,
         }
 
         query_string = urllib.parse.urlencode(params)
-        return f"vless://{uuid}@{server}:{port}?{query_string}#{name}"
+        return f"vless://{uuid}@{server}:{port}?{query_string}"
 
     def generate_subscription_url(
-        self, base_url: str, user: str, sub_name: str | None = None, password: str | None = None
+        self,
+        base_url: str,
+        user: str,
+        sub_name: str | None = None,
+        password: str | None = None,
     ) -> str:
         """Generate sub:// URL for subscription.
 
