@@ -301,7 +301,7 @@ class ProxyConfig:
         else:
             uuid = self._generate_uuid(proxy_name)
 
-        port = settings.vless_port  # Use port from environment variable
+        port = settings.https_port  # Use HTTPS port for client routing
 
         return {
             "name": name,
@@ -317,7 +317,7 @@ class ProxyConfig:
                 if hasattr(settings, "reality_public_key")
                 else "",
                 "short-id": settings.reality_short_id,
-                "server-name": "www.office.com",
+                "server-name": "www.microsoft.com",
             },
             "udp": True,
         }
@@ -548,7 +548,7 @@ class ProxyConfig:
         params = {
             "remarks": name,
             "tls": "1",
-            "peer": "www.office.com",
+            "peer": "www.microsoft.com",
             "alpn": "h2,http/1.1",
             "xtls": "2",
             "pbk": settings.reality_public_key

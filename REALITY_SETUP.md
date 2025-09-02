@@ -29,14 +29,14 @@ sing-box generate reality-keypair
 ### 3. Server Configuration
 The server will be configured with:
 - **Port**: 443 (standard HTTPS port)
-- **Server Name**: www.office.com
-- **Handshake Server**: www.office.com:443
+- **Server Name**: www.microsoft.com
+- **Handshake Server**: www.microsoft.com:443
 - **Transport**: gRPC with service name "grpc"
 
 ### 4. Client Configuration
 Clients will receive VLESS URLs with:
 - **Security**: reality (instead of tls)
-- **SNI**: www.office.com
+- **SNI**: www.microsoft.com
 - **Fingerprint**: chrome
 - **Public Key**: from REALITY_PUBLIC_KEY
 - **Short ID**: from REALITY_SHORT_ID
@@ -60,11 +60,11 @@ Clients will receive VLESS URLs with:
   "tls": {
     "enabled": true,
     "alpn": ["h2", "http/1.1"],
-    "server_name": "www.office.com",
+    "server_name": "www.microsoft.com",
     "reality": {
       "enabled": true,
       "handshake": {
-        "server": "www.office.com:443",
+        "server": "www.microsoft.com:443",
         "server_port": 443
       },
       "private_key": "your-private-key",
@@ -80,7 +80,7 @@ Clients will receive VLESS URLs with:
 
 ### Client (ShadowRocket)
 ```
-vless://uuid@13.60.43.17:443?type=grpc&serviceName=grpc&security=reality&sni=www.office.com&fp=chrome&pbk=public-key&sid=c047f3e99c90ff71&fragment=1,40-60,30-50#SE_1_REALITY
+vless://uuid@13.60.43.17:443?type=grpc&serviceName=grpc&security=reality&sni=www.microsoft.com&fp=chrome&pbk=public-key&sid=c047f3e99c90ff71&fragment=1,40-60,30-50#SE_1_REALITY
 ```
 
 ## Benefits

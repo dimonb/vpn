@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     hysteria2_port: int = Field(default=47012)
     hysteria2_v2_port: int = Field(default=47013)
     vless_port: int = Field(default=8443)
+    https_port: int = Field(default=443)
     reality_private_key: str = Field(default="")
     reality_public_key: str = Field(default="")
     reality_short_id: str = Field(default="c047f3e99c90ff71")
