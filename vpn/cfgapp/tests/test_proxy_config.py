@@ -352,7 +352,7 @@ class TestProxyConfig:
         assert "reality-opts" in config
         assert config["reality-opts"]["public-key"] == "test-public-key"
         assert config["reality-opts"]["short-id"] == "test-short-id"
-        assert config["reality-opts"]["server-name"] == "www.google.com"
+        assert config["reality-opts"]["server-name"] == "www.office.com"
 
 
 

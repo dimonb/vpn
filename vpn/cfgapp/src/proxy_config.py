@@ -317,7 +317,7 @@ class ProxyConfig:
                 if hasattr(settings, "reality_public_key")
                 else "",
                 "short-id": settings.reality_short_id,
-                "server-name": "www.google.com",
+                "server-name": "www.office.com",
             },
             "udp": True,
         }
@@ -548,7 +548,7 @@ class ProxyConfig:
         params = {
             "remarks": name,
             "tls": "1",
-            "peer": "www.google.com",
+            "peer": "www.office.com",
             "alpn": "h2,http/1.1",
             "xtls": "2",
             "pbk": settings.reality_public_key

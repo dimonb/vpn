@@ -31,6 +31,18 @@
         creates: "{{ config_directory }}/cert/cert.pem"
 
 
+    # - name: copy caddy files and configs to the server
+    #   ansible.builtin.synchronize:
+    #     src: ./vpn/caddy/
+    #     dest: "{{ config_directory }}/caddy/"
+
+    # - name: Set correct permissions for caddy files
+    #   ansible.builtin.file:
+    #     path: "{{ config_directory }}/caddy"
+    #     owner: "{{ config_owner }}"
+    #     group: "{{ config_group }}"
+    #     recurse: true
+
     - name: copy cfgapp Python files and configs to the server
       ansible.builtin.synchronize:
         src: ./vpn/cfgapp/
@@ -58,7 +70,7 @@
         - { src: "{{ config_file | default('./config.json') }}", dest: 'config.json', mode: '0644' }
         - { src: './vpn/sing-box.json.j2', dest: 'sing-box.json', mode: '0644' }
         - { src: './vpn/docker-compose.yml.j2', dest: 'docker-compose.yml', mode: '0644' }
-        - { src: './vpn/Caddyfile.j2', dest: 'Caddyfile', mode: '0644' }
+        - { src: './vpn/caddy.json.j2', dest: 'caddy.json', mode: '0644' }
         - { src: './vpn/hysteria.yaml.j2', dest: 'hysteria.yaml', mode: '0644' }
         - { src: './vpn/json-exporter.yml', dest: 'json-exporter.yml', mode: '0644' }
 

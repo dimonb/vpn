@@ -129,7 +129,7 @@ class TestShadowRocketSubscription:
         # Parse VLESS URL
         assert "sg-1.linode.v.dimonb.com" in vless_url
         assert "tls=1" in vless_url
-        assert "peer=www.google.com" in vless_url
+        assert "peer=www.office.com" in vless_url
         assert "alpn=h2%2Chttp%2F1.1" in vless_url  # URL-encoded comma
         assert "xtls=2" in vless_url
 
@@ -246,7 +246,7 @@ class TestShadowRocketSubscription:
         # Check query parameters
         assert query_params["remarks"] == ["test_proxy"]
         assert query_params["tls"] == ["1"]
-        assert query_params["peer"] == ["www.google.com"]
+        assert query_params["peer"] == ["www.office.com"]
         assert query_params["alpn"] == ["h2,http/1.1"]
         assert query_params["xtls"] == ["2"]
         assert query_params["pbk"] == ["test-public-key"]
