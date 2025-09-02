@@ -21,7 +21,7 @@
 
     - name: Add Docker repository
       apt_repository:
-        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
+        repo: "deb [arch={{ {'x86_64':'amd64','aarch64':'arm64','armv7l':'armhf','armv6l':'armhf'}.get(ansible_architecture, ansible_architecture) }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
         state: present
 
     - name: Update apt and install Docker
