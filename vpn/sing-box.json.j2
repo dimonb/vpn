@@ -11,8 +11,7 @@
         {% for user in config.users %}
             { "name": "{{ user }}", 
               "password": "{{ (user + '.' + salt) | hash('sha256') }}"
-            }
-        {% if not loop.last %},{% endif %}
+            }{% if not loop.last %},{% endif %}
         {% endfor %}
       ],
       "obfs": {
@@ -41,8 +40,7 @@
           "name": "{{ user }}",
           "uuid": "{{ (user + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}",
           "flow": "xtls-rprx-vision"
-        }
-        {% if not loop.last %},{% endif %}
+        }{% if not loop.last %},{% endif %}
         {% endfor %}
       ],
       "tls": {

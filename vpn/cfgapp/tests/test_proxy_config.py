@@ -148,7 +148,7 @@ class TestProxyConfig:
         # Check that all configs are VLESS
         for config in configs:
             assert config["type"] == "vless"
-            assert "sg_1_linode" in config["name"]
+            assert "SG_1_LINODE" in config["name"]
 
     @patch("src.proxy_config.settings")
     def test_generate_proxy_configs_v2(self, mock_settings, config_file: Path) -> None:
@@ -165,7 +165,7 @@ class TestProxyConfig:
         for config in configs:
             assert config["type"] == "hysteria2"
             assert config["port"] == 47013  # v2 port
-            assert "de_1_contabo_v2" in config["name"]
+            assert "DE_1_CONTABO_V2" in config["name"]
 
     @patch("src.proxy_config.settings")
     def test_generate_proxy_configs_v2_with_user(
@@ -184,7 +184,7 @@ class TestProxyConfig:
         for config in configs:
             assert config["type"] == "hysteria2"
             assert config["port"] == 47013  # v2 port
-            assert "de_1_contabo_v2" in config["name"]
+            assert "DE_1_CONTABO_V2" in config["name"]
             assert (
                 config["password"] == "testuser:test-password"
             )  # user:password format
@@ -203,7 +203,7 @@ class TestProxyConfig:
 
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
-        assert config["name"] == "test_proxy"
+        assert config["name"] == "TEST_PROXY"
         assert config["password"] == "custom-password-123"  # Use provided password
         assert config["port"] == 47012  # Fixed port from environment
         assert config["skip-cert-verify"] is True
@@ -228,7 +228,7 @@ class TestProxyConfig:
 
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
-        assert config["name"] == "test_proxy"
+        assert config["name"] == "TEST_PROXY"
         assert "password" in config  # Generated password
         assert config["password"] != "custom-password-123"  # Should be different
         assert config["port"] == 47012  # Fixed port from environment
@@ -254,7 +254,7 @@ class TestProxyConfig:
 
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
-        assert config["name"] == "test_proxy"
+        assert config["name"] == "TEST_PROXY"
         assert config["password"] == "custom-password-123"  # Use provided password
         assert config["port"] == 47013  # v2 port from environment
         assert config["skip-cert-verify"] is True
@@ -279,7 +279,7 @@ class TestProxyConfig:
 
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
-        assert config["name"] == "test_proxy"
+        assert config["name"] == "TEST_PROXY"
         assert (
             config["password"] == "testuser:custom-password-123"
         )  # Use user:password format
@@ -306,7 +306,7 @@ class TestProxyConfig:
 
         assert config["type"] == "hysteria2"
         assert config["server"] == "test.host.com"
-        assert config["name"] == "test_proxy"
+        assert config["name"] == "TEST_PROXY"
         assert "password" in config  # Generated password
         assert config["password"] != "custom-password-123"  # Should be different
         assert config["port"] == 47013  # v2 port from environment
@@ -325,7 +325,7 @@ class TestProxyConfig:
 
         assert config["type"] == "vmess"
         assert config["server"] == "test.host.com"
-        assert config["name"] == "test_proxy"
+        assert config["name"] == "TEST_PROXY"
         assert "uuid" in config
         assert "port" in config
         assert config["tls"] is True
@@ -344,7 +344,7 @@ class TestProxyConfig:
 
         assert config["type"] == "vless"
         assert config["server"] == "test.host.com"
-        assert config["name"] == "test_proxy"
+        assert config["name"] == "TEST_PROXY"
         assert "uuid" in config
         assert "port" in config
         assert config["security"] == "reality"
@@ -365,7 +365,7 @@ class TestProxyConfig:
         assert len(proxy_list) == 2
 
         # Check that names follow expected pattern
-        expected_names = ["de_1_contabo", "us_1_vultr"]
+        expected_names = ["DE_1_CONTABO", "US_1_VULTR"]
         assert set(proxy_list) == set(expected_names)
 
     def test_get_proxy_list_premium(self, config_file: Path) -> None:
@@ -377,7 +377,7 @@ class TestProxyConfig:
         assert len(proxy_list) == 1
 
         # Check that names follow expected pattern
-        expected_names = ["sg_1_linode"]
+        expected_names = ["SG_1_LINODE"]
         assert set(proxy_list) == set(expected_names)
 
     def test_unsupported_protocol(self, config_file: Path) -> None:

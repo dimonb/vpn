@@ -80,7 +80,7 @@ class TestShadowRocketSubscription:
         assert "de-1.contabo.v.dimonb.com:47012" in hy2_url
         assert "peer=i.am.com" in hy2_url
         assert "obfs-password=test-obfs-password" in hy2_url
-        assert "#de_1_contabo" in hy2_url
+        assert "#DE_1_CONTABO" in hy2_url
 
         # Check VMess URL
         vmess_urls = [url for url in urls if url.startswith("vmess://")]
@@ -96,7 +96,7 @@ class TestShadowRocketSubscription:
         vmess_config = json.loads(base64.b64decode(vmess_b64).decode())
 
         assert vmess_config["add"] == "us-1.vultr.v.dimonb.com"
-        assert vmess_config["ps"] == "us_1_vultr"
+        assert vmess_config["ps"] == "US_1_VULTR"
         assert vmess_config["net"] == "ws"
         assert vmess_config["tls"] == "tls"
 
@@ -283,7 +283,7 @@ class TestShadowRocketSubscription:
         assert "de-1.contabo.v.dimonb.com:47013" in hy2_url
         assert "peer=i.am.com" in hy2_url
         assert "obfs-password=test-obfs-password" in hy2_url
-        assert "#de_1_contabo_v2" in hy2_url
+        assert "#DE_1_CONTABO_V2" in hy2_url
         # Check that password is in user:password format
         assert "testuser:test-password@" in hy2_url
 

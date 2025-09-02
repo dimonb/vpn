@@ -132,7 +132,7 @@ rules:
         )  # 2 proxies (one per proxy, not per user)
 
         # Check proxy names
-        expected_names = ["de_1_contabo", "us_1_vultr"]
+        expected_names = ["DE_1_CONTABO", "US_1_VULTR"]
         assert set(proxy_group["proxies"]) == set(expected_names)
 
     def test_replace_proxy_placeholders_premium(
@@ -164,7 +164,7 @@ rules:
         assert len(proxy_group["proxies"]) == 1  # 1 proxy (one per proxy, not per user)
 
         # Check proxy names
-        expected_names = ["sg_1_linode"]
+        expected_names = ["SG_1_LINODE"]
         assert set(proxy_group["proxies"]) == set(expected_names)
 
     def test_replace_proxy_placeholders_no_proxy_config(

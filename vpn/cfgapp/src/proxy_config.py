@@ -170,7 +170,7 @@ class ProxyConfig:
             Hysteria2 configuration dictionary
         """
         # Generate unique name
-        name = f"{proxy_name.lower()}"
+        name = f"{proxy_name}"
 
         # Use provided password or generate one
         if password:
@@ -216,7 +216,7 @@ class ProxyConfig:
             Hysteria2 v2 configuration dictionary
         """
         # Generate unique name
-        name = f"{proxy_name.lower()}"
+        name = f"{proxy_name}"
 
         # Use provided password or generate one
         if password:
@@ -257,7 +257,7 @@ class ProxyConfig:
         Returns:
             VMess configuration dictionary
         """
-        name = f"{proxy_name.lower()}"
+        name = f"{proxy_name}"
         uuid = self._generate_uuid(proxy_name)
         port = self._generate_port(proxy_name)
 
@@ -288,7 +288,7 @@ class ProxyConfig:
         Returns:
             VLESS configuration dictionary
         """
-        name = f"{proxy_name.lower()}"
+        name = f"{proxy_name}"
 
         # Generate UUID based on user + salt (same as server config)
         if user:
