@@ -324,12 +324,12 @@ The JSON configuration explicitly defines static file handling:
 - **Fallback**: All other requests are proxied to the CFG App on port 8003
 
 ### Error Handling
-- **Custom 404 Page**: Beautiful error page served from `/static/404.html` via CFG App
-- **CFG App 404**: Returns proper 404 status codes when templates or paths are not found
+- **Custom 404 Page**: Beautiful error page served from `/static/404.html` by Caddy
+- **CFG App 404**: Returns simple 404 status codes when templates or paths are not found
+- **Caddy Interception**: Uses `handle_response` to intercept 404 responses and serve custom HTML
 - **Error Logging**: Comprehensive logging of all 404 and error responses
-- **Fallback**: When CFG App returns 404, Caddy serves the custom error page
 
-**Note**: The 404 page is served by CFG App when it cannot process a request, ensuring consistent error handling across all endpoints.
+**Note**: Caddy automatically intercepts 404 responses from CFG App and serves the beautiful custom error page, ensuring consistent error handling across all endpoints.
 
 ## 🔧 CFG App Features
 

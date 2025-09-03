@@ -105,9 +105,7 @@
             },
             { "match": [ { "path": ["/"] } ], "handle": [ { "handler": "file_server", "root": "/static", "index_names": ["index.html"] } ] },
             { "match": [ { "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/test.html", "/404.html"] } ], "handle": [ { "handler": "file_server", "root": "/static" } ] },
-            {
-              "handle": [ { "handler": "reverse_proxy", "upstreams": [ { "dial": "127.0.0.1:8003" } ] } ]
-            }
+            { "handle": [ { "handler": "reverse_proxy", "upstreams": [ { "dial": "127.0.0.1:8003" } ] } ] }
           ]
         }
       }
