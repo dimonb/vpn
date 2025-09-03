@@ -43,27 +43,18 @@
           "listen": [":80"],
           "logs": { "logger_names": { "default": "access" } },
           "routes": [
-            { "match": [{ "path": ["/.well-known/*"] }], "handle": [{ "handler": "file_server", "root": "/var/www" }] },
-            { "match": [{ "path": ["/"] }], "handle": [{ "handler": "file_server", "root": "/static", "index_names": ["index.html"] }] },
-            { "match": [{ "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/test.html", "/404.html"] }], "handle": [{ "handler": "file_server", "root": "/static" }] },
+            { 
+              "match": [{ "path": ["/.well-known/*"] }], 
+              "handle": [{ "handler": "file_server", "root": "/var/www" }] 
+            },
             {
               "handle": [
-                {
-                  "handler": "reverse_proxy",
-                  "upstreams": [{ "dial": "127.0.0.1:8003" }],
-                  "handle_response": [
-                    {
-                      "match": { "status_code": [404] },
-                      "routes": [
-                        {
-                          "handle": [
-                            { "handler": "rewrite", "uri": "/404.html" },
-                            { "handler": "file_server", "root": "/static" }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
+                { 
+                  "handler": "static_response", 
+                  "status_code": 301,
+                  "headers": {
+                    "Location": ["https://{host}{uri}"]
+                  }
                 }
               ]
             }
@@ -84,6 +75,7 @@
             }
           ],
           "routes": [
+
             {
               "match": [{ "path": ["/node/metrics*"] }],
               "handle": [
@@ -136,7 +128,7 @@
                         {
                           "handle": [
                             { "handler": "rewrite", "uri": "/404.html" },
-                            { "handler": "file_server", "root": "/static" }
+                            { "handler": "file_server", "root": "/static", "status_code":  404}
                           ]
                         }
                       ]
