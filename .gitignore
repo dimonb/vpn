@@ -14,3 +14,4 @@ config.ebac.json
 servers.ebac.cfg
 .env.ebac
 .env.local
+*.local.*

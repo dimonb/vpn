@@ -12,6 +12,8 @@ A complete solution for deploying VPN servers using Ansible, Docker, and Sing-Bo
 - **CFG App**: Python application for proxy rule processing and NETSET expansion
 - **Template Processing**: Support for Clash, Shadowrocket, and custom templates
 - **QR Code Generation**: Easy client configuration sharing
+- **Multi-Protocol Support**: Hysteria2, VMess, VLESS, and Reality protocols
+- **IP Aggregation**: Smart IP block management and deduplication
 
 ## 📋 Requirements
 
@@ -94,11 +96,11 @@ Edit `config.json` with your users and subscription configuration:
   ],
   "subs": {
     "default": {
-      "de_1_contabo": {"protocol": "hy2", "host": "de-1.contabo.v.dimonb.com"},
-      "us_1_vultr": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"}
+      "de_1_contabo": {"protocol": "hy2", "host": "de-1.your-domain.com"},
+      "us_1_vultr": {"protocol": "vmess", "host": "us-1.your-domain.com"}
     },
     "premium": {
-      "sg_1_linode": {"protocol": "vless", "host": "sg-1.linode.v.dimonb.com"}
+      "sg_1_linode": {"protocol": "vless", "host": "sg-1.your-domain.com"}
     }
   }
 }
@@ -108,6 +110,7 @@ Edit `config.json` with your users and subscription configuration:
 - `hy2`: Hysteria2 protocol
 - `vmess`: VMess protocol
 - `vless`: VLESS protocol
+- `reality`: Reality protocol (with automatic key generation)
 
 ## 🚀 Deployment
 
@@ -131,6 +134,13 @@ This command will:
 - Configure Caddy for TLS certificates
 - Set up Docker Compose services
 - Generate user configurations
+
+### Generate Reality Keys (Optional)
+```bash
+make reality-keys
+```
+
+Generates Reality protocol keys for enhanced security and performance.
 
 ### Run CFG App (Development)
 ```bash
@@ -162,31 +172,63 @@ This requires `qrencode` and will:
 - Save it as `~/Downloads/username.png`
 - Add the user to the VPN configuration if not exists
 
+### System Maintenance
+```bash
+# Upgrade Ubuntu distribution
+make ubuntu-dist-upgrade
+
+# Upgrade Ubuntu release
+make ubuntu-release-upgrade
+```
+
 ## 📁 Project Structure
 
 ```
 vpn/
-├── README.md              # This documentation
-├── Makefile               # Build automation
-├── deploy_vpn.yml         # Ansible deployment playbook
-├── install_docker.yml     # Docker installation playbook
-├── servers.cfg            # Server inventory (create from example)
-├── servers.cfg.example    # Server inventory template
-├── config.json            # User and subscription configuration
-├── config.json.example    # Configuration template
-├── .env                   # Environment secrets (create from example)
-├── env.example            # Environment template
-└── vpn/                   # VPN configuration templates
-    ├── docker-compose.yml.j2  # Docker services configuration
-    ├── sing-box.json.j2       # VPN server configuration
-    ├── Caddyfile.j2           # Web server and TLS configuration
-    └── cfgapp/                # Python configuration application
-        ├── src/               # Application source code
-        ├── tests/             # Test suite
-        ├── examples/          # Template examples
-        ├── pyproject.toml     # Python dependencies
-        ├── Dockerfile         # Container configuration
-        └── README.md          # CFG App documentation
+├── README.md                    # This documentation
+├── Makefile                     # Build automation
+├── deploy_vpn.yml              # Ansible deployment playbook
+├── install_docker.yml          # Docker installation playbook
+├── ubuntu_dist_upgrade.yml     # Ubuntu distribution upgrade
+├── ubuntu_release_upgrade.yml  # Ubuntu release upgrade
+├── servers.cfg                 # Server inventory (create from example)
+├── servers.cfg.example         # Server inventory template
+├── config.json                 # User and subscription configuration
+├── config.json.example         # Configuration template
+├── .env                        # Environment secrets (create from example)
+├── env.example                 # Environment template
+├── generate_reality_keys.py    # Reality protocol key generator
+├── generate_singbox_keys.py    # Sing-Box key generator
+└── vpn/                        # VPN configuration templates
+    ├── docker-compose.yml.j2   # Docker services configuration
+    ├── sing-box.json.j2        # VPN server configuration
+    ├── hysteria.yaml.j2        # Hysteria2 configuration
+    ├── Caddyfile.j2            # Web server and TLS configuration
+    ├── caddy/                  # Caddy web server configuration
+    │   └── Dockerfile         # Caddy container
+    ├── json-exporter.yml       # Prometheus metrics exporter
+    └── cfgapp/                 # Python configuration application
+        ├── src/                # Application source code
+        │   ├── auth.py         # Authentication system
+        │   ├── clash_processor.py # Clash configuration processor
+        │   ├── config.py       # Configuration management
+        │   ├── main.py         # Main application entry point
+        │   ├── processor.py    # Template processor
+        │   ├── proxy_config.py # Proxy configuration
+        │   └── utils.py        # Utility functions
+        ├── tests/              # Test suite
+        ├── examples/           # Template examples
+        │   ├── clash_with_auth.tpl      # Clash with authentication
+        │   ├── clash_with_proxies.tpl   # Clash with proxy rules
+        │   └── shadowrocket.tpl         # Shadowrocket template
+        ├── templates/          # HTML templates
+        │   └── subscription.html        # Subscription page template
+        ├── pyproject.toml      # Python dependencies
+        ├── poetry.lock         # Locked dependencies
+        ├── Dockerfile          # Container configuration
+        ├── docker-compose.yml  # Local development setup
+        ├── Makefile            # CFG App build automation
+        └── README.md           # CFG App documentation
 ```
 
 ## 🔧 CFG App Features
@@ -194,11 +236,13 @@ vpn/
 The CFG App (`vpn/cfgapp/`) provides:
 
 - **Template Processing**: Process templates with RULE-SET and NETSET expansion
-- **Authentication**: Built-in authentication system
+- **Authentication**: Built-in authentication system with salt-based hashing
 - **Clash Support**: Full Clash YAML configuration processing
 - **Proxy Configuration**: Dynamic proxy generation from JSON configuration
 - **Subscription Support**: Multiple subscription tiers with query parameter selection
 - **IP Aggregation**: Smart IP block aggregation and deduplication
+- **Shadowrocket Support**: iOS Shadowrocket configuration generation
+- **Custom Templates**: Extensible template system for various clients
 
 ### CFG App Configuration
 
@@ -229,7 +273,28 @@ HYSTERIA2_PORT=47012
 LOG_LEVEL=INFO
 ```
 
-## 🔒 Security Notes
+### CFG App Development
+
+```bash
+cd vpn/cfgapp
+
+# Install dependencies
+poetry install
+
+# Run tests
+poetry run pytest
+
+# Run development server
+poetry run python src/main.py
+
+# Build Docker image
+make build
+
+# Run in Docker
+make run
+```
+
+## 🔒 Security Features
 
 - **TLS Certificates**: Automatically generated and managed by Caddy
 - **Password Hashing**: Uses SHA256 with salt for secure password generation
@@ -237,6 +302,8 @@ LOG_LEVEL=INFO
 - **Docker Isolation**: Services run in isolated containers
 - **Port Configuration**: All ports are configurable via environment variables
 - **Subscription Security**: Multi-tier access control with query parameter validation
+- **Reality Protocol**: Enhanced security with automatic key generation
+- **IP Filtering**: Configurable IP block management and filtering
 
 ## ⚙️ Environment Variables
 
@@ -270,12 +337,58 @@ LOG_LEVEL=INFO
    - Install dependencies: `cd vpn/cfgapp && poetry install`
    - Check environment variables in `vpn/cfgapp/.env`
 
+5. **Reality protocol issues**
+   - Run `make reality-keys` to generate new keys
+   - Ensure keys are properly configured in templates
+
 ### Logs and Debugging
 
 - VPN server logs: `docker-compose logs sing-box`
 - Web server logs: `docker-compose logs caddy`
 - CFG App logs: Check application output during `make cfgapp-dev`
 - Ansible verbose mode: Add `-v` flag to make commands
+
+### Testing
+
+```bash
+# Test Reality configuration
+python test_reality.py
+
+# Test Reality with real keys
+python test_reality_real.py
+
+# Test CFG App endpoints
+cd vpn/cfgapp && poetry run pytest
+
+# Test Docker builds
+make test-docker-build
+```
+
+## 📊 Monitoring
+
+- **Prometheus Metrics**: JSON exporter for monitoring VPN server metrics
+- **Docker Health Checks**: Built-in health monitoring for all services
+- **Log Aggregation**: Centralized logging through Docker Compose
+
+## 🔄 Updates and Maintenance
+
+### Regular Maintenance
+```bash
+# Update system packages
+make ubuntu-dist-upgrade
+
+# Update Docker images
+docker-compose pull
+docker-compose up -d
+
+# Regenerate Reality keys (if needed)
+make reality-keys
+```
+
+### Backup and Recovery
+- Configuration files: `config.json`, `servers.cfg`, `.env`
+- Docker volumes: VPN data and certificates
+- User configurations: Generated client configs
 
 ## 📝 License
 
@@ -284,3 +397,9 @@ LOG_LEVEL=INFO
 ## 🤝 Contributing
 
 [Add contribution guidelines here]
+
+## 📚 Additional Documentation
+
+- [REALITY_SETUP.md](./REALITY_SETUP.md) - Reality protocol setup guide
+- [vpn/cfgapp/README.md](./vpn/cfgapp/README.md) - CFG App detailed documentation
+- [vpn/cfgapp/examples/](./vpn/cfgapp/examples/) - Template examples and usage
