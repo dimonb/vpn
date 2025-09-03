@@ -46,17 +46,6 @@
             { 
               "match": [{ "path": ["/.well-known/*"] }], 
               "handle": [{ "handler": "file_server", "root": "/var/www" }] 
-            },
-            {
-              "handle": [
-                { 
-                  "handler": "static_response", 
-                  "status_code": 301,
-                  "headers": {
-                    "Location": ["https://{host}{uri}"]
-                  }
-                }
-              ]
             }
           ]
         },
@@ -75,7 +64,18 @@
             }
           ],
           "routes": [
-
+            {
+              "handle": [
+                {
+                  "handler": "headers",
+                  "response": {
+                    "set": {
+                      "Strict-Transport-Security": ["max-age=31536000; includeSubDomains; preload"]
+                    }
+                  }
+                }
+              ]
+            },
             {
               "match": [{ "path": ["/node/metrics*"] }],
               "handle": [
