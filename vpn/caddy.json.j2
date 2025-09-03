@@ -1,9 +1,8 @@
 {
   "logging": {
     "logs": {
-        "default": { "level": "DEBUG" },
-    "tls":     { "level": "DEBUG" },
-
+      "default": { "level": "DEBUG" },
+      "tls": { "level": "DEBUG" },
       "access": {
         "level": "INFO",
         "writer": {
@@ -24,34 +23,52 @@
           "listen": [":443"],
           "routes": [
             {
-              "match": [ { "tls": { "sni": ["www.microsoft.com"] } } ],
+              "match": [{ "tls": { "sni": ["www.microsoft.com"] } }],
               "handle": [
-                { "handler": "proxy", "upstreams": [ { "dial": ["127.0.0.1:8443"] } ] }
+                { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:8443"] }] }
               ]
             },
             {
               "handle": [
-                { "handler": "proxy", "upstreams": [ { "dial": ["127.0.0.1:4443"] } ] }
+                { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:4443"] }] }
               ]
             }
           ]
         }
       }
     },
-
     "http": {
       "servers": {
         "http_srv": {
           "listen": [":80"],
           "logs": { "logger_names": { "default": "access" } },
           "routes": [
-            { "match": [ { "path": ["/.well-known/*"] } ], "handle": [ { "handler": "file_server", "root": "/var/www" } ] },
-            { "match": [ { "path": ["/"] } ], "handle": [ { "handler": "file_server", "root": "/static", "index_names": ["index.html"] } ] },
-            { "match": [ { "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/test.html", "/404.html"] } ], "handle": [ { "handler": "file_server", "root": "/static" } ] },
-            { "handle": [ { "handler": "reverse_proxy", "upstreams": [ { "dial": "127.0.0.1:8003" } ] } ] }
+            { "match": [{ "path": ["/.well-known/*"] }], "handle": [{ "handler": "file_server", "root": "/var/www" }] },
+            { "match": [{ "path": ["/"] }], "handle": [{ "handler": "file_server", "root": "/static", "index_names": ["index.html"] }] },
+            { "match": [{ "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/test.html", "/404.html"] }], "handle": [{ "handler": "file_server", "root": "/static" }] },
+            {
+              "handle": [
+                {
+                  "handler": "reverse_proxy",
+                  "upstreams": [{ "dial": "127.0.0.1:8003" }],
+                  "handle_response": [
+                    {
+                      "match": { "status_code": [404] },
+                      "routes": [
+                        {
+                          "handle": [
+                            { "handler": "rewrite", "uri": "/404.html" },
+                            { "handler": "file_server", "root": "/static" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           ]
         },
-
         "https_srv": {
           "listen": [":4443"],
           "logs": { "logger_names": { "default": "access" } },
@@ -68,11 +85,12 @@
           ],
           "routes": [
             {
-              "match": [ { "path": ["/node/metrics*"] } ],
+              "match": [{ "path": ["/node/metrics*"] }],
               "handle": [
                 {
                   "handler": "authentication",
-                  "providers": {"http_basic": {
+                  "providers": {
+                    "http_basic": {
                       "realm": "metrics",
                       "accounts": [
                         { "username": "metrics", "password": "{{ metrics_pwd | password_hash('bcrypt') }}" }
@@ -82,15 +100,16 @@
                   }
                 },
                 { "handler": "rewrite", "uri": "/metrics" },
-                { "handler": "reverse_proxy", "upstreams": [ { "dial": "127.0.0.1:9100" } ] }
+                { "handler": "reverse_proxy", "upstreams": [{ "dial": "127.0.0.1:9100" }] }
               ]
             },
             {
-              "match": [ { "path": ["/hy2/metrics*"] } ],
+              "match": [{ "path": ["/hy2/metrics*"] }],
               "handle": [
                 {
                   "handler": "authentication",
-                  "providers": {"http_basic": {
+                  "providers": {
+                    "http_basic": {
                       "realm": "metrics",
                       "accounts": [
                         { "username": "metrics", "password": "{{ metrics_pwd | password_hash('bcrypt') }}" }
@@ -100,17 +119,36 @@
                   }
                 },
                 { "handler": "rewrite", "uri": "/metrics" },
-                { "handler": "reverse_proxy", "upstreams": [ { "dial": "127.0.0.1:7979" } ] }
+                { "handler": "reverse_proxy", "upstreams": [{ "dial": "127.0.0.1:7979" }] }
               ]
             },
-            { "match": [ { "path": ["/"] } ], "handle": [ { "handler": "file_server", "root": "/static", "index_names": ["index.html"] } ] },
-            { "match": [ { "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/test.html", "/404.html"] } ], "handle": [ { "handler": "file_server", "root": "/static" } ] },
-            { "handle": [ { "handler": "reverse_proxy", "upstreams": [ { "dial": "127.0.0.1:8003" } ] } ] }
+            { "match": [{ "path": ["/"] }], "handle": [{ "handler": "file_server", "root": "/static", "index_names": ["index.html"] }] },
+            { "match": [{ "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/test.html", "/404.html"] }], "handle": [{ "handler": "file_server", "root": "/static" }] },
+            {
+              "handle": [
+                {
+                  "handler": "reverse_proxy",
+                  "upstreams": [{ "dial": "127.0.0.1:8003" }],
+                  "handle_response": [
+                    {
+                      "match": { "status_code": [404] },
+                      "routes": [
+                        {
+                          "handle": [
+                            { "handler": "rewrite", "uri": "/404.html" },
+                            { "handler": "file_server", "root": "/static" }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           ]
         }
       }
     },
-
     "tls": {
       "certificates": {
         "automate": ["{{ ansible_host }}"]
@@ -120,10 +158,7 @@
           {
             "subjects": ["{{ ansible_host }}"],
             "issuers": [
-              {
-                "module": "acme",
-                "email": "admin@{{ ansible_host }}"
-              }
+              { "module": "acme", "email": "admin@{{ ansible_host }}" }
             ]
           }
         ]
