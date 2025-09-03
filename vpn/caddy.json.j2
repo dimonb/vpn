@@ -123,12 +123,12 @@
                   "upstreams": [{ "dial": "127.0.0.1:8003" }],
                   "handle_response": [
                     {
-                      "match": { "status_code": [404] },
+                      "match": { "status_code": [404, 500, 502, 503, 504] },
                       "routes": [
                         {
                           "handle": [
-                            { "handler": "rewrite", "uri": "/404.html" },
-                            { "handler": "file_server", "root": "/static", "status_code":  404}
+                            { "handler": "rewrite", "uri": "/{http.reverse_proxy.status_code}.html" },
+                            { "handler": "file_server", "root": "/static", "status_code": "{http.reverse_proxy.status_code}"}
                           ]
                         }
                       ]
