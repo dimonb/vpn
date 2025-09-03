@@ -52,6 +52,24 @@
         "https_srv": {
           "listen": [":4443"],
           "logs": { "logger_names": { "default": "access" } },
+          "errors": {
+            "routes": [
+              {
+                "match": [
+                  { "expression": "{http.error.status_code} >= 500 && {http.error.status_code} < 600" }
+                ],
+                "handle": [
+                  { "handler": "rewrite", "uri": "/5xx.html" },
+                  { "handler": "file_server", "root": "/static", "status_code": "{http.error.status_code}" }
+                ]
+              },
+              {
+                "handle": [
+                  { "handler": "static_response", "status_code": 500, "body": "Internal Server Error\n" }
+                ]
+              }
+            ]
+          },
           "tls_connection_policies": [
             {
               "protocol_min": "tls1.2",
@@ -127,7 +145,7 @@
                       "routes": [
                         {
                           "handle": [
-                            { "handler": "rewrite", "uri": "/{http.reverse_proxy.status_code}.html" },
+                            { "handler": "rewrite", "uri": "/404.html" },
                             { "handler": "file_server", "root": "/static", "status_code": "{http.reverse_proxy.status_code}"}
                           ]
                         }

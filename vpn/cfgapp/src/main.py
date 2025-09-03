@@ -91,6 +91,16 @@ async def fastapi_http_exception_handler(request: Request, exc: FastAPIHTTPExcep
         headers={"content-type": "text/plain; charset=utf-8"},
     )
 
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle all unhandled exceptions."""
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return Response(
+        content="Internal Server Error",
+        status_code=500,
+        headers={"content-type": "text/plain; charset=utf-8"},
+    )
+
 
 async def forward_request(request: Request, path_with_search: str) -> httpx.Response:
     """Forward request to origin API."""
@@ -102,9 +112,22 @@ async def forward_request(request: Request, path_with_search: str) -> httpx.Resp
     headers.pop("cookie", None)  # Remove cookies
     headers.pop("host", None)  # Remove host header
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(target, headers=headers, timeout=30.0)
-        return response
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(target, headers=headers, timeout=30.0)
+            return response
+    except httpx.ConnectError as e:
+        logger.error(f"Connection error to origin: {e}")
+        raise HTTPException(status_code=502, detail="Bad Gateway")
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout error to origin: {e}")
+        raise HTTPException(status_code=504, detail="Gateway Timeout")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP status error from origin: {e}")
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error to origin: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 @app.get("/health")
@@ -219,14 +242,50 @@ async def proxy_handler(request: Request, path: str):
 
             # If not 404, return the response as-is
             if response.status_code != 404:
+                # Clean up headers to avoid Content-Length conflicts
+                clean_headers = {}
+                for key, value in response.headers.items():
+                    if key.lower() not in ['content-length', 'transfer-encoding']:
+                        clean_headers[key] = value
+                
+                # If content is gzipped, we need to decompress it and remove content-length
+                if 'content-encoding' in response.headers and 'gzip' in response.headers.get('content-encoding', ''):
+                    import gzip
+                    try:
+                        # Check if content actually starts with gzip magic bytes
+                        if response.content.startswith(b'\x1f\x8b'):
+                            # Decompress the content
+                            decompressed_content = gzip.decompress(response.content)
+                            # Remove content-length since we're changing the content size
+                            clean_headers.pop('content-length', None)
+                            return Response(
+                                content=decompressed_content,
+                                status_code=response.status_code,
+                                headers=clean_headers,
+                            )
+                        else:
+                            # Content is not actually gzipped, just remove the misleading header
+                            logger.info("Content has gzip header but is not actually compressed")
+                            clean_headers.pop('content-encoding', None)
+                            clean_headers.pop('content-length', None)
+                    except Exception as e:
+                        logger.warning(f"Failed to decompress gzipped content: {e}")
+                        # Fallback to original content without problematic headers
+                        clean_headers.pop('content-encoding', None)
+                        clean_headers.pop('content-length', None)
+                
                 return Response(
                     content=response.content,
                     status_code=response.status_code,
-                    headers=dict(response.headers),
+                    headers=clean_headers,
                 )
         except Exception as e:
             logger.error(f"Forward request failed: {e}")
-            raise HTTPException(status_code=500, detail="Forward request failed") from e
+            return Response(
+                content="Internal Server Error",
+                status_code=500,
+                headers={"content-type": "text/plain; charset=utf-8"},
+            )
 
         # If we get here, origin returned 404, try template
         tpl_path = url.path + ".tpl" + ("?" + url.query if url.query else "")
@@ -297,7 +356,7 @@ async def proxy_handler(request: Request, path: str):
     except Exception as e:
         logger.error(f"Worker error: {str(e)}")
         return Response(
-            content="Worker error",
+            content="Internal Server Error",
             status_code=500,
             headers={"content-type": "text/plain; charset=utf-8"},
         )
