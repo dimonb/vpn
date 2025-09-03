@@ -2,6 +2,8 @@
 
 A complete solution for deploying VPN servers using Ansible, Docker, and Sing-Box with automatic TLS certificate management via Caddy. Includes a Python-based configuration application for proxy rule processing and subscription management.
 
+> **⚠️ Disclaimer**: This configuration is provided for educational and personal use. Users are responsible for complying with local laws and regulations regarding internet usage and proxy services.
+
 ## 🚀 Features
 
 - **Automated Deployment**: One-command deployment using Ansible
@@ -14,6 +16,8 @@ A complete solution for deploying VPN servers using Ansible, Docker, and Sing-Bo
 - **QR Code Generation**: Easy client configuration sharing
 - **Multi-Protocol Support**: Hysteria2, VMess, VLESS, and Reality protocols
 - **IP Aggregation**: Smart IP block management and deduplication
+- **Static File Serving**: Priority serving of static files (HTML, CSS, JS, images) before proxying to CFG App
+- **JSON Configuration**: Caddy configured via JSON for better automation and version control
 
 ## 📋 Requirements
 
@@ -174,11 +178,26 @@ This requires `qrencode` and will:
 
 ### System Maintenance
 ```bash
-# Upgrade Ubuntu distribution
+# Upgrade Ubuntu  stribution
 make ubuntu-dist-upgrade
 
 # Upgrade Ubuntu release
 make ubuntu-release-upgrade
+```
+
+### Static File Management
+```bash
+# Add new static HTML page
+echo '<h1>New Page</h1>' > vpn/static/new-page.html
+
+# Add new CSS file
+echo 'body { color: red; }' > vpn/static/css/custom.css
+
+# Add new image (replace with actual image)
+# cp your-image.png vpn/static/images/
+
+# Restart Caddy to pick up changes
+docker-compose restart proxy
 ```
 
 ## 📁 Project Structure
@@ -203,9 +222,18 @@ vpn/
     ├── docker-compose.yml.j2   # Docker services configuration
     ├── sing-box.json.j2        # VPN server configuration
     ├── hysteria.yaml.j2        # Hysteria2 configuration
-    ├── Caddyfile.j2            # Web server and TLS configuration
+    ├── caddy.json.j2           # Web server and TLS configuration
     ├── caddy/                  # Caddy web server configuration
     │   └── Dockerfile         # Caddy container
+    ├── static/                 # Static files (served with priority)
+    │   ├── index.html          # Site under construction page
+    │   ├── robots.txt          # Search engine directives (disallows all crawling)
+    │   ├── test.html           # Test page for verification
+    │   ├── css/
+    │   │   └── style.css       # Main stylesheet
+    │   ├── images/             # Image assets (create as needed)
+    │   ├── js/                 # JavaScript files (create as needed)
+    │   └── .gitkeep            # Git tracking file
     ├── json-exporter.yml       # Prometheus metrics exporter
     └── cfgapp/                 # Python configuration application
         ├── src/                # Application source code
@@ -230,6 +258,78 @@ vpn/
         ├── Makefile            # CFG App build automation
         └── README.md           # CFG App documentation
 ```
+
+## 📁 Static File Serving
+
+The `vpn/static/` directory contains static files that are served with priority by Caddy:
+
+- **Priority Serving**: Static files are served first, before any requests are proxied to the CFG App
+- **File Types**: HTML, CSS, JavaScript, images, and other static assets
+- **Use Cases**: Landing pages, documentation, client downloads, and other static content
+- **Performance**: Direct file serving without application processing overhead
+- **Main Page**: The root path `/` now shows "Site is under construction" instead of the CFG App
+
+### Static File Structure
+```
+vpn/static/
+├── index.html          # Site under construction page
+├── 404.html            # Custom error page for 404/500 errors
+├── robots.txt          # Search engine directives (disallows all crawling)
+├── test.html           # Test page for verification
+├── css/
+│   └── style.css       # Main stylesheet
+├── images/             # Image assets (create as needed)
+├── js/                 # JavaScript files (create as needed)
+└── .gitkeep            # Ensures directory is tracked in git
+```
+
+### Adding Static Files
+Simply place files in the `vpn/static/` directory and they will be automatically served. The file server will:
+- Serve exact file matches (e.g., `/about.html` serves `static/about.html`)
+- Serve directory indexes if `index.html` exists
+- Fall back to CFG App for unmatched requests
+
+**Note**: The `vpn/static/` directory is automatically deployed to all servers when you run `make deploy`. Any files you add to this directory will be available on all deployed servers.
+
+## 🌐 Caddy Web Server Configuration
+
+Caddy is configured via `caddy.json.j2` to serve content in the following priority order:
+
+1. **Static Files** (`/static/` directory) - Highest priority
+   - Direct file serving for HTML, CSS, JS, images
+   - No application processing overhead
+   - Ideal for landing pages and static content
+
+2. **CFG App** (Python application) - Fallback
+   - Handles dynamic requests and API calls
+   - Processes templates and configurations
+   - Manages subscriptions and user authentication
+
+3. **Metrics Endpoints** - Special handling
+   - `/node/metrics` - Node exporter metrics
+   - `/hy2/metrics` - Hysteria2 metrics
+   - Protected with basic authentication
+
+### Request Flow
+```
+Request → Caddy → Static File Check → CFG App (if no static file found)
+```
+
+**Important**: Since `index.html` exists in the static directory, the root path `/` will always show "Site is under construction" and never reach the CFG App. To access the CFG App, use specific paths like `/cfg/`, `/subscription/`, etc.
+
+### Static File Routing in caddy.json.j2
+The JSON configuration explicitly defines static file handling:
+- **Root path `/`**: Serves `index.html` from `/static` directory
+- **Static assets**: `/css/*`, `/js/*`, `/images/*`, `/robots.txt`, `/test.html` are served directly
+- **Fallback**: All other requests are proxied to the CFG App on port 8003
+
+### Error Handling
+- **Custom 404 Page**: Beautiful error page served from `/static/404.html` via CFG App
+- **CFG App 404**: Returns proper 404 status codes when templates or paths are not found
+- **Error Logging**: Comprehensive logging of all 404 and error responses
+- **Fallback**: When CFG App returns 404, Caddy serves the custom error page
+
+**Note**: The 404 page is served by CFG App when it cannot process a request, ensuring consistent error handling across all endpoints.
 
 ## 🔧 CFG App Features
 
@@ -362,6 +462,11 @@ cd vpn/cfgapp && poetry run pytest
 
 # Test Docker builds
 make test-docker-build
+
+# Test static file serving (after deployment)
+curl http://your-server-ip/
+curl http://your-server-ip/css/style.css
+curl http://your-server-ip/robots.txt
 ```
 
 ## 📊 Monitoring

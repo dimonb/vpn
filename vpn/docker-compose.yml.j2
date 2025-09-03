@@ -23,6 +23,7 @@ services:
       - ./caddy.json:/etc/caddy/caddy.json
       - ./caddy:/data/
       - ./logs:/logs/
+      - ./static:/static/
     command: ["caddy","run","--config","/etc/caddy/caddy.json"]
 
   # Catawiki json_exporter

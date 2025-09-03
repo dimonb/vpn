@@ -61,7 +61,12 @@ class TemplateProcessor:
                 return [f"# NETSET fetch failed: {url_str} ({response.status_code})"]
 
             text = response.text
-            expanded = netset_expand(text, suffix)
+            expanded = netset_expand(
+                text,
+                suffix,
+                ipv4_block_prefix=settings.ipv4_block_prefix,
+                ipv6_block_prefix=settings.ipv6_block_prefix,
+            )
             print(
                 f"NETSET expanded {len(expanded)} entries (IPv4→/{settings.ipv4_block_prefix}, IPv6→/{settings.ipv6_block_prefix})"
             )

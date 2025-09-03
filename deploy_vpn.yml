@@ -59,6 +59,21 @@
         mode: '0755'
         recurse: true
 
+    - name: copy static files to the server
+      ansible.builtin.synchronize:
+        src: ./vpn/static/
+        dest: "{{ config_directory }}/static/"
+        rsync_opts:
+          - "--exclude=.*"
+
+    - name: Set correct permissions for static files
+      ansible.builtin.file:
+        path: "{{ config_directory }}/static"
+        owner: "{{ config_owner }}"
+        group: "{{ config_group }}"
+        mode: '0755'
+        recurse: true
+
     - name: Deploy configuration files using templates
       ansible.builtin.template:
         src: "{{ item.src }}"

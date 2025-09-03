@@ -7,6 +7,8 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
@@ -62,6 +64,32 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Handle HTTP exceptions including 404 errors."""
+    if exc.status_code == 404:
+        logger.info(f"404 Not Found: {request.url.path}")
+        return Response(
+            content="Path not found",
+            status_code=404,
+            headers={"content-type": "text/plain; charset=utf-8"},
+        )
+    return Response(
+        content=exc.detail,
+        status_code=exc.status_code,
+        headers={"content-type": "text/plain; charset=utf-8"},
+    )
+
+@app.exception_handler(FastAPIHTTPException)
+async def fastapi_http_exception_handler(request: Request, exc: FastAPIHTTPException):
+    """Handle FastAPI HTTP exceptions."""
+    logger.info(f"FastAPI HTTP Exception: {exc.status_code} - {exc.detail}")
+    return Response(
+        content=exc.detail,
+        status_code=exc.status_code,
+        headers={"content-type": "text/plain; charset=utf-8"},
+    )
 
 
 async def forward_request(request: Request, path_with_search: str) -> httpx.Response:
@@ -202,25 +230,329 @@ async def proxy_handler(request: Request, path: str):
 
         # If we get here, origin returned 404, try template
         tpl_path = url.path + ".tpl" + ("?" + url.query if url.query else "")
-        logger.info(f"404 -> try template: {tpl_path}")
+        logger.info(f"Origin returned 404 for {url.path}, trying template: {tpl_path}")
 
         try:
             tpl_response = await forward_request(request, tpl_path)
             if not tpl_response.is_success:
-                logger.error(f"Template fetch failed: {tpl_response.status_code}")
-                # Return original 404 response
+                logger.info(f"Template not found for path: {url.path} (status: {tpl_response.status_code})")
+                # Return HTML 404 page when template is not found
                 return Response(
-                    content=response.content,
-                    status_code=response.status_code,
-                    headers=dict(response.headers),
+                    content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 600px;
+            padding: 2rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .error-code {
+            font-size: 12rem;
+            font-weight: 900;
+            line-height: 1;
+            margin-bottom: 1rem;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .error-title {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .error-message {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .floating-shapes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .shape {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .shape:nth-child(1) {
+            width: 80px;
+            height: 80px;
+            top: 20%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .shape:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            top: 60%;
+            right: 10%;
+            animation-delay: 2s;
+        }
+
+        .shape:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            bottom: 20%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+
+        .shape:nth-child(4) {
+            width: 100px;
+            height: 100px;
+            top: 30%;
+            right: 30%;
+            animation-delay: 1s;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px) rotate(0deg);
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .error-code {
+                font-size: 8rem;
+            }
+            
+            .error-title {
+                font-size: 2rem;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <div class="container">
+        <div class="error-code">404</div>
+        <h1 class="error-title">Page Not Found</h1>
+        <p class="error-message">
+            The page you're looking for doesn't exist or has been moved. 
+            Please check back soon.
+        </p>
+    </div>
+</body>
+</html>""",
+                    status_code=404,
+                    headers={"content-type": "text/html; charset=utf-8"},
                 )
         except Exception as e:
-            logger.error(f"Template fetch failed: {e}")
-            # Return original 404 response
+            logger.info(f"Template fetch failed for path: {url.path} - {e}")
+            # Return HTML 404 page when template fetch fails
             return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
+                content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #0f172a;
+            color: #e2e8f0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 600px;
+            padding: 2rem;
+            position: relative;
+            z-index: 2;
+        }
+
+        .error-code {
+            font-size: 12rem;
+            font-weight: 900;
+            line-height: 1;
+            margin-bottom: 1rem;
+            text-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: linear-gradient(45deg, #fff, #f0f0f0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .error-title {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .error-message {
+            font-size: 1.2rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .floating-shapes {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .shape {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .shape:nth-child(1) {
+            width: 80px;
+            height: 80px;
+            top: 20%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .shape:nth-child(2) {
+            width: 120px;
+            height: 120px;
+            top: 60%;
+            right: 10%;
+            animation-delay: 2s;
+        }
+
+        .shape:nth-child(3) {
+            width: 60px;
+            height: 60px;
+            bottom: 20%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+
+        .shape:nth-child(4) {
+            width: 100px;
+            height: 100px;
+            top: 30%;
+            right: 30%;
+            animation-delay: 1s;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px) rotate(0deg);
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .error-code {
+                font-size: 8rem;
+            }
+            
+            .error-title {
+                font-size: 2rem;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="floating-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <div class="container">
+        <div class="error-code">404</div>
+        <h1 class="error-title">Page Not Found</h1>
+        <p class="error-message">
+            The page you're looking for doesn't exist or has been moved. 
+            Please check back soon.
+        </p>
+    </div>
+</body>
+</html>""",
+                status_code=404,
+                headers={"content-type": "text/html; charset=utf-8"},
             )
 
         # Process template
