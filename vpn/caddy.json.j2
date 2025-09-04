@@ -141,6 +141,17 @@
                   "upstreams": [{ "dial": "127.0.0.1:8003" }],
                   "handle_response": [
                     {
+                      "match": { "status_code": [401, 403] },
+                      "routes": [
+                        {
+                          "handle": [
+                            { "handler": "rewrite", "uri": "/401.html" },
+                            { "handler": "file_server", "root": "/static", "status_code": "{http.reverse_proxy.status_code}" }
+                          ]
+                        }
+                      ]
+                    },
+                    {
                       "match": { "status_code": [404] },
                       "routes": [
                         {
