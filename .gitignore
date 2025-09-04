@@ -15,3 +15,4 @@ servers.ebac.cfg
 .env.ebac
 .env.local
 *.local.*
+.DS_Store

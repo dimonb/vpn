@@ -133,7 +133,7 @@
               ]
             },
             { "match": [{ "path": ["/"] }], "handle": [{ "handler": "file_server", "root": "/static", "index_names": ["index.html"] }] },
-            { "match": [{ "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/test.html", "/404.html", "/5xx.html"] }], "handle": [{ "handler": "file_server", "root": "/static" }] },
+            { "match": [{ "path": ["/css/*", "/js/*", "/images/*", "/robots.txt", "/*.html", "/*.css"] }], "handle": [{ "handler": "file_server", "root": "/static" }] },
             {
               "handle": [
                 {
