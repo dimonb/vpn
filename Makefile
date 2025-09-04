@@ -73,7 +73,7 @@ check-env:
 
 deploy: check-env
 	@source $(ENV_FILE) 2>/dev/null || true; \
-	ansible-playbook $(ANSIBLE_ARGS) -f 20 deploy_vpn.yml $(ANSIBLE_ENV_ARGS)
+	ansible-playbook $(ANSIBLE_ARGS) -f 4 deploy_vpn.yml $(ANSIBLE_ENV_ARGS)
 
 ubuntu-update:
 	ansible-playbook $(ANSIBLE_ARGS) -f 4 ubuntu_dist_upgrade.yml
