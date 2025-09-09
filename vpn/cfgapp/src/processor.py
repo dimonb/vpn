@@ -30,7 +30,7 @@ class TemplateProcessor:
         """Fetch URL with smart proxying for same/ALT hosts."""
         parsed_url = urlparse(url_str)
 
-        if parsed_url.netloc == incoming_host:
+        if parsed_url.netloc == incoming_host and settings.api_host:
             # Proxy via API_HOST for same host
             path = parsed_url.path + (
                 "?" + parsed_url.query if parsed_url.query else ""
@@ -119,16 +119,7 @@ class TemplateProcessor:
                 if match:
                     netset_urls.append(match.group(1))
 
-            if netset_urls:
-                print(
-                    f"Found {len(netset_urls)} NETSET entr{'ies' if len(netset_urls) > 1 else 'y'} in {url}"
-                )
-                jobs = [self.expand_netset(ns_url, suffix) for ns_url in netset_urls]
-                results = await asyncio.gather(*jobs)
-                merged = dedupe_lines([item for sublist in results for item in sublist])
-                return [f"# RULE-SET,{url}"] + merged
-
-            # Process regular rules
+            # Process regular rules first
             output = [f"# RULE-SET,{url}"]
             for line in lines:
                 trimmed = line.strip()
@@ -158,6 +149,17 @@ class TemplateProcessor:
                     trimmed = f"{trimmed}{suffix}"
 
                 output.append(trimmed)
+
+            # Process NETSET entries if any
+            if netset_urls:
+                print(
+                    f"Found {len(netset_urls)} NETSET entr{'ies' if len(netset_urls) > 1 else 'y'} in {url}"
+                )
+                jobs = [self.expand_netset(ns_url, suffix) for ns_url in netset_urls]
+                results = await asyncio.gather(*jobs)
+                netset_results = [item for sublist in results for item in sublist]
+                output.extend(netset_results)
+                return dedupe_lines(output)
 
             return dedupe_lines(output)
 
