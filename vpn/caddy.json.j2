@@ -23,7 +23,7 @@
           "listen": [":443"],
           "routes": [
             {
-              "match": [{ "tls": { "sni": ["www.microsoft.com"] } }],
+              "match": [{ "tls": { "sni": ["ok.ru"] } }],
               "handle": [
                 { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:8443"] }] }
               ]

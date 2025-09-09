@@ -49,7 +49,7 @@ def test_url_format():
             "ru-0.yandex.v.dimonb.com:8443",
             "remarks=RU_0_YANDEX",
             "tls=1",
-            "peer=www.microsoft.com",
+            "peer=ok.ru",
             "alpn=h2,http/1.1",
             "xtls=2",
             "pbk=",

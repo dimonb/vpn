@@ -317,7 +317,7 @@ class ProxyConfig:
                 if hasattr(settings, "reality_public_key")
                 else "",
                 "short-id": settings.reality_short_id,
-                "server-name": "www.microsoft.com",
+                "server-name": "ok.ru",
             },
             "udp": True,
         }
@@ -548,7 +548,7 @@ class ProxyConfig:
         params = {
             "remarks": name,
             "tls": "1",
-            "peer": "www.microsoft.com",
+            "peer": "ok.ru",
             "alpn": "h2,http/1.1",
             "xtls": "2",
             "pbk": settings.reality_public_key

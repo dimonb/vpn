@@ -89,8 +89,13 @@
         - { src: './vpn/hysteria.yaml.j2', dest: 'hysteria.yaml', mode: '0644' }
         - { src: './vpn/json-exporter.yml', dest: 'json-exporter.yml', mode: '0644' }
 
+    - name: Build docker-compose apps
+      ansible.builtin.shell:
+        chdir: "{{ config_directory }}"
+        cmd: docker compose build
+
     - name: Run Docker Compose
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"
-        cmd: docker compose build && docker compose up --pull always --remove-orphans --force-recreate -d 
+        cmd: docker compose up --pull always --remove-orphans --force-recreate -d
 #docker compose down && 

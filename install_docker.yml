@@ -35,8 +35,47 @@
         name: docker
         state: started
         enabled: yes
+
     - name: Add user ubuntu to docker group
       user:
         name: ubuntu
         groups: docker
         append: yes
+
+    - name: Configure Docker log rotation
+      copy:
+        dest: /etc/docker/daemon.json
+        content: |
+          {
+            "log-driver": "json-file",
+            "log-opts": {
+              "max-size": "50m",
+              "max-file": "3"
+            }
+          }
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Find existing Docker log files
+      ansible.builtin.find:
+        paths: /var/lib/docker/containers
+        patterns:
+          - "*-json.log"
+        file_type: file
+        recurse: yes
+      register: docker_logs
+      failed_when: false
+
+    - name: Truncate Docker container logs
+      ansible.builtin.command: "truncate -s 0 {{ item.path }}"
+      loop: "{{ docker_logs.files | default([]) }}"
+      when: (docker_logs.files | default([])) | length > 0
+      loop_control:
+        label: "{{ item.path }}"
+        
+    - name: Restart Docker to apply log config
+      systemd:
+        name: docker
+        state: restarted
+        enabled: yes

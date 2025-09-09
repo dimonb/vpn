@@ -46,11 +46,11 @@
       "tls": {
         "enabled": true,
         "alpn": [],
-        "server_name": "www.microsoft.com",
+        "server_name": "ok.ru",
         "reality": {
           "enabled": true,
           "handshake": {
-            "server": "www.microsoft.com",
+            "server": "ok.ru",
             "server_port": 443
           },
           "private_key": "{{ reality_private_key | default('') }}",
@@ -60,5 +60,74 @@
       }
     }
   ],
+  {% set proxy_cfg = (config.get('proxy') if config is mapping else none) %}
+  {% set host_cfg = (proxy_cfg.get(ansible_host) if proxy_cfg is mapping and proxy_cfg.get(ansible_host) else none) %}
+  {% set features = (host_cfg.get('features') if host_cfg is mapping else none) %}
+  {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
+  {% if forward_group and config.subs.get(forward_group) %}
+  "outbounds": [
+    { "type": "direct", "tag": "direct-out" },
+    {
+      "type": "urltest",
+      "tag": "auto",
+      "outbounds": [
+        {% set hy_tags = [] %}
+        {% for name, item in config.subs[forward_group].items() %}
+          {% if item.protocol | lower | regex_search('^hy2') %}
+            {% set _ = hy_tags.append(item.host) %}
+          {% endif %}
+        {% endfor %}
+        {% for tag in hy_tags %}
+        "{{ tag }}"{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ],
+      "interrupt_exist_connections": false
+    }
+    {% for name, item in config.subs[forward_group].items() %}
+      {% if item.protocol | lower | regex_search('^hy2') %}
+    ,
+    {
+      "type": "hysteria2",
+      "tag": "{{ item.host }}",
+      "server": "{{ item.host }}",
+      "server_port": {{ hysteria2_port | default(47012) }},
+      "password": "{{ ('system' + '.' + salt) | hash('sha256') }}",
+      "obfs": {
+        "type": "salamander",
+        "password": "{{ obfs_password }}"
+      },
+      "tls": {
+        "enabled": true,
+        "alpn": ["h3"],
+        "insecure": true
+      }
+    }
+      {% endif %}
+    {% endfor %}
+  ],
+  "route": {
+    "rules": [
+      { "ip_is_private": true, "outbound": "direct-out" },
+      { "rule_set": "geoip-ru", "outbound": "direct-out" },
+      { "rule_set": "domain-ru", "outbound": "direct-out" }
+    ],
+    "rule_set": [
+      {
+        "tag": "geoip-ru",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs",
+        "download_detour": "auto"
+      },
+      {
+        "tag": "domain-ru",
+        "type": "inline",
+        "rules": [ { "domain_suffix": [".ru"] } ]
+      }
+    ],
+    "final": "auto"
+  }
+  {% else %}
   "outbounds": [{ "type": "direct" }]
+  {% endif %}
 }

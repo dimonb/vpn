@@ -147,7 +147,7 @@ class TemplateProcessor:
                 trimmed = re.sub(r",\s+", ",", trimmed)
 
                 # Handle proxy/direct/reject suffixes
-                if re.search(r"(,PROXY|,DIRECT|,REJECT)\s*$", trimmed, re.IGNORECASE):
+                if re.search(r",(PROXY|DIRECT|REJECT)\s*$", trimmed, re.IGNORECASE):
                     trimmed = re.sub(
                         r",(PROXY|DIRECT|REJECT)\s*$",
                         suffix,
