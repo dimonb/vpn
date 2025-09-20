@@ -38,7 +38,7 @@ TEST_ONLY ?= ""
 ANSIBLE_ARGS := -i $(SERVERS_FILE) --ssh-extra-args='-o ControlPersist=60s'$(if $(filter-out "",$(TEST_ONLY)), --limit $(TEST_ONLY),)
 ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "vless_port=$(VLESS_PORT)" -e "reality_private_key=$(REALITY_PRIVATE_KEY)" -e "reality_public_key=$(REALITY_PUBLIC_KEY)" -e "reality_short_id=$(REALITY_SHORT_ID)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$${METRICS_PWD:-}" -e "config_file=$(CONFIG_FILE)"
 
-.PHONY: install-docker check-env deploy deploy-test cn passwords
+.PHONY: install-docker check-env deploy deploy-test cn passwords ubuntu-update ubuntu-upgrade amneziawg-install
 
 install-docker:
 	ansible-playbook $(ANSIBLE_ARGS) -f 4 install_docker.yml
@@ -80,6 +80,10 @@ ubuntu-update:
 
 ubuntu-upgrade:
 	ansible-playbook $(ANSIBLE_ARGS) -f 4 ubuntu_release_upgrade.yml
+
+amneziawg-install:
+	ansible-playbook $(ANSIBLE_ARGS) -f 4 amneziawg_install.yml
+
 
 cfgapp-dev:
 	@source $(ENV_FILE) 2>/dev/null || true; \

@@ -109,7 +109,9 @@
     "rules": [
       { "ip_is_private": true, "outbound": "direct-out" },
       { "rule_set": "geoip-ru", "outbound": "direct-out" },
-      { "rule_set": "domain-ru", "outbound": "direct-out" }
+      { "rule_set": "domain-ru", "outbound": "direct-out" },
+      { "rule_set": "geoip-il", "outbound": "direct-out" },
+      { "rule_set": "domain-il", "outbound": "direct-out" }
     ],
     "rule_set": [
       {
@@ -123,7 +125,20 @@
         "tag": "domain-ru",
         "type": "inline",
         "rules": [ { "domain_suffix": [".ru"] } ]
+      },
+            {
+        "tag": "geoip-il",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-il.srs",
+        "download_detour": "auto"
+      },
+      {
+        "tag": "domain-il",
+        "type": "inline",
+        "rules": [ { "domain_suffix": [".il"] } ]
       }
+
     ],
     "final": "auto"
   }

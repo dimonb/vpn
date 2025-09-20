@@ -1,0 +1,95 @@
+---
+- name: Install AmneziaWG kernel module and tools on Ubuntu
+  hosts: all
+  become: true
+  vars:
+    # Можно переопределить через --extra-vars "upgrade_system=false enable_sysctl=false"
+    upgrade_system: true              # делает apt full-upgrade (dist-upgrade)
+    enable_sysctl:  true              # включает форвардинг (нужен для маршрутизации через VPN/NAT64)
+    deb_src_mirror: "http://archive.ubuntu.com/ubuntu"
+
+  pre_tasks:
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Optionally dist-upgrade to latest packages/kernel
+      apt:
+        update_cache: true
+        upgrade: dist
+      when: upgrade_system
+      register: upgrade_result
+      tags: [upgrade]
+
+    - name: Reboot if kernel or core packages were upgraded (Ubuntu creates reboot flag)
+      reboot:
+        msg: "Reboot triggered by playbook after dist-upgrade"
+        connect_timeout: 30
+        reboot_timeout: 900
+        pre_reboot_delay: 5
+        post_reboot_delay: 15
+      when:
+        - upgrade_system
+        - upgrade_result is changed
+        - ansible_facts['os_family'] == 'Debian'
+      tags: [upgrade]
+
+  tasks:
+    - name: Ensure deb-src lines are uncommented in /etc/apt/sources.list (if present)
+      replace:
+        path: /etc/apt/sources.list
+        regexp: '^#\s*(deb-src\s+.*)$'
+        replace: '\1'
+      failed_when: false
+
+    - name: Check if any deb-src entry exists
+      shell: "grep -E '^[[:space:]]*deb-src[[:space:]]' /etc/apt/sources.list || true"
+      register: debsrc_grep
+      changed_when: false
+
+    - name: Ensure at least one deb-src entry exists (add if missing)
+      lineinfile:
+        path: /etc/apt/sources.list
+        insertafter: EOF
+        line: "deb-src {{ deb_src_mirror }} {{ ansible_distribution_release }} main restricted universe multiverse"
+      when: debsrc_grep.stdout == ""
+
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install prerequisites
+      apt:
+        name:
+          - software-properties-common
+          - python3-launchpadlib
+          - gnupg2
+          - "linux-headers-{{ ansible_kernel }}"
+        state: present
+
+    - name: Add Amnezia PPA
+      apt_repository:
+        repo: "ppa:amnezia/ppa"
+        state: present
+        update_cache: true
+
+    - name: Install AmneziaWG (kernel module + tools)
+      apt:
+        name: amneziawg
+        state: present
+        update_cache: true
+
+    - name: Optionally enable IPv6 and IPv4 forwarding (for routing/NAT64)
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: true
+      loop:
+        - { name: "net.ipv6.conf.all.disable_ipv6", value: "0" }
+        - { name: "net.ipv6.conf.all.forwarding",  value: "1" }
+        - { name: "net.ipv4.ip_forward",          value: "1" }
+      when: enable_sysctl
+      tags: [sysctl]
+
+  handlers: []
