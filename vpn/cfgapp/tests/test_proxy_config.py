@@ -347,12 +347,17 @@ class TestProxyConfig:
         assert config["name"] == "TEST_PROXY"
         assert "uuid" in config
         assert "port" in config
+        assert config["tls"] is True
         assert config["security"] == "reality"
-        assert config["network"] == "grpc"
+        assert config["network"] == "tcp"
+        assert config["flow"] == "xtls-rprx-vision"
+        assert config["servername"] == "ok.ru"
+        assert config["alpn"] == ["h2", "http/1.1"]
+        assert config["client-fingerprint"] == "chrome"
+        assert config["udp"] is True
         assert "reality-opts" in config
         assert config["reality-opts"]["public-key"] == "test-public-key"
         assert config["reality-opts"]["short-id"] == "test-short-id"
-        assert config["reality-opts"]["server-name"] == "ok.ru"
 
 
 

@@ -309,16 +309,19 @@ class ProxyConfig:
             "server": host,
             "port": port,
             "uuid": uuid,
-            "network": "grpc",
-            "grpc-opts": {"grpc-service-name": "grpc"},
+            "tls": True,
             "security": "reality",
             "reality-opts": {
                 "public-key": settings.reality_public_key
                 if hasattr(settings, "reality_public_key")
                 else "",
                 "short-id": settings.reality_short_id,
-                "server-name": "ok.ru",
             },
+            "flow": "xtls-rprx-vision",
+            "servername": "ok.ru",
+            "network": "tcp",
+            "alpn": ["h2", "http/1.1"],
+            "client-fingerprint": "chrome",
             "udp": True,
         }
 

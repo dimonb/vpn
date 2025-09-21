@@ -211,6 +211,28 @@ The system generates proxy configurations with the following structure:
   udp: true
 ```
 
+#### VLESS
+```yaml
+- name: ru_2_kvmki
+  type: vless
+  server: ru-2.kvmki.v.dimonb.com
+  port: 443
+  uuid: 5e284f0f-f2c2-3a95-2197-41e478d9f8cf
+  tls: true
+  security: reality
+  reality-opts:
+    public-key: abc123...
+    short-id: def456...
+  flow: xtls-rprx-vision
+  servername: ok.ru
+  network: tcp
+  alpn:
+    - h2
+    - http/1.1
+  client-fingerprint: chrome
+  udp: true
+```
+
 #### VMess
 ```yaml
 - name: us_1_vultr
