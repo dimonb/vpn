@@ -64,9 +64,11 @@
   {% set host_cfg = (proxy_cfg.get(ansible_host) if proxy_cfg is mapping and proxy_cfg.get(ansible_host) else none) %}
   {% set features = (host_cfg.get('features') if host_cfg is mapping else none) %}
   {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
-  {% if forward_group and config.subs.get(forward_group) %}
+  {% set forward_il_group = (features.get('forward-il') if features is mapping else none) %}
+  {% if (forward_group and config.subs.get(forward_group)) or (forward_il_group and config.subs.get(forward_il_group)) %}
   "outbounds": [
     { "type": "direct", "tag": "direct-out" },
+    {% if forward_group and config.subs.get(forward_group) %}
     {
       "type": "urltest",
       "tag": "auto",
@@ -82,7 +84,27 @@
         {% endfor %}
       ],
       "interrupt_exist_connections": false
+    }{% if forward_il_group and config.subs.get(forward_il_group) %},{% endif %}
+    {% endif %}
+    {% if forward_il_group and config.subs.get(forward_il_group) %}
+    {
+      "type": "urltest",
+      "tag": "auto-il",
+      "outbounds": [
+        {% set hy_il_tags = [] %}
+        {% for name, item in config.subs[forward_il_group].items() %}
+          {% if item.protocol | lower | regex_search('^hy2') %}
+            {% set _ = hy_il_tags.append(item.host) %}
+          {% endif %}
+        {% endfor %}
+        {% for tag in hy_il_tags %}
+        "{{ tag }}"{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ],
+      "interrupt_exist_connections": false
     }
+    {% endif %}
+    {% if forward_group and config.subs.get(forward_group) %}
     {% for name, item in config.subs[forward_group].items() %}
       {% if item.protocol | lower | regex_search('^hy2') %}
     ,
@@ -104,14 +126,43 @@
     }
       {% endif %}
     {% endfor %}
+    {% endif %}
+    {% if forward_il_group and config.subs.get(forward_il_group) %}
+    {% for name, item in config.subs[forward_il_group].items() %}
+      {% if item.protocol | lower | regex_search('^hy2') %}
+    ,
+    {
+      "type": "hysteria2",
+      "tag": "{{ item.host }}",
+      "server": "{{ item.host }}",
+      "server_port": {{ hysteria2_port | default(47012) }},
+      "password": "{{ ('system' + '.' + salt) | hash('sha256') }}",
+      "obfs": {
+        "type": "salamander",
+        "password": "{{ obfs_password }}"
+      },
+      "tls": {
+        "enabled": true,
+        "alpn": ["h3"],
+        "insecure": true
+      }
+    }
+      {% endif %}
+    {% endfor %}
+    {% endif %}
   ],
   "route": {
     "rules": [
       { "ip_is_private": true, "outbound": "direct-out" },
       { "rule_set": "geoip-ru", "outbound": "direct-out" },
       { "rule_set": "domain-ru", "outbound": "direct-out" },
+      {% if forward_il_group and config.subs.get(forward_il_group) %}
+      { "rule_set": "geoip-il", "outbound": "auto-il" },
+      { "rule_set": "domain-il", "outbound": "auto-il" }
+      {% else %}
       { "rule_set": "geoip-il", "outbound": "direct-out" },
       { "rule_set": "domain-il", "outbound": "direct-out" }
+      {% endif %}
     ],
     "rule_set": [
       {
@@ -140,7 +191,7 @@
       }
 
     ],
-    "final": "auto"
+    "final": {% if forward_group and config.subs.get(forward_group) %}"auto"{% elif forward_il_group and config.subs.get(forward_il_group) %}"auto-il"{% else %}"direct-out"{% endif %}
   }
   {% else %}
   "outbounds": [{ "type": "direct" }]
