@@ -18,6 +18,11 @@
         autoremove: yes
         autoclean: yes
 
+    - name: Check if a reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+
     - name: Reboot the machine if required
       reboot:
         msg: "Reboot initiated by Ansible for system upgrade"
@@ -26,4 +31,5 @@
         pre_reboot_delay: 0
         post_reboot_delay: 60
         test_command: whoami
+      when: reboot_required_file.stat.exists | default(false)
 
