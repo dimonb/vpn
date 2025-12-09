@@ -154,6 +154,10 @@
   "route": {
     "rules": [
       { "ip_is_private": true, "outbound": "direct-out" },
+      { "rule_set": "geosite-google", "outbound": "auto" },
+      { "rule_set": "geosite-telegram", "outbound": "auto" },
+      { "rule_set": "geosite-facebook", "outbound": "auto" },
+      { "rule_set": "geosite-instagram", "outbound": "auto" },
       { "rule_set": "geoip-ru", "outbound": "direct-out" },
       { "rule_set": "domain-ru", "outbound": "direct-out" },
       {% if forward_il_group and config.subs.get(forward_il_group) %}
@@ -170,24 +174,52 @@
         "type": "remote",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs",
-        "download_detour": "auto"
+        "download_detour": "direct-out"
       },
       {
         "tag": "domain-ru",
         "type": "inline",
         "rules": [ { "domain_suffix": [".ru"] } ]
       },
-            {
+      {
         "tag": "geoip-il",
         "type": "remote",
         "format": "binary",
         "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-il.srs",
-        "download_detour": "auto"
+        "download_detour": "direct-out"
       },
       {
         "tag": "domain-il",
         "type": "inline",
         "rules": [ { "domain_suffix": [".il"] } ]
+      },
+      {
+        "tag": "geosite-google",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-google.srs",
+        "download_detour": "direct-out"
+      },
+      {
+        "tag": "geosite-telegram",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-telegram.srs",
+        "download_detour": "direct-out"
+      },
+      {
+        "tag": "geosite-facebook",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-facebook.srs",
+        "download_detour": "direct-out"
+      },
+      {
+        "tag": "geosite-instagram",
+        "type": "remote",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-instagram.srs",
+        "download_detour": "direct-out"
       }
 
     ],

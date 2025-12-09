@@ -84,6 +84,8 @@ ubuntu-upgrade:
 amneziawg-install:
 	ansible-playbook $(ANSIBLE_ARGS) -f 4 amneziawg_install.yml
 
+render-template-test:
+	ansible ru-2 $(ANSIBLE_ARGS) $(ANSIBLE_ENV_ARGS) -m debug  -a 'msg="{{ lookup(\"template\", \"vpn/sing-box.json.j2\") }}"' 
 
 cfgapp-dev:
 	@source $(ENV_FILE) 2>/dev/null || true; \

@@ -12,16 +12,31 @@
         - apt-transport-https
         - ca-certificates
         - curl
+        - gnupg
         - software-properties-common
 
-    - name: Add Docker GPG key
-      apt_key:
-        url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
+    - name: Ensure keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker GPG key (dearmored) to keyring
+      shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+          | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Set permissions on Docker GPG keyring
+      file:
+        path: /etc/apt/keyrings/docker.gpg
+        state: file
+        mode: '0644'
 
     - name: Add Docker repository
       apt_repository:
-        repo: "deb [arch={{ {'x86_64':'amd64','aarch64':'arm64','armv7l':'armhf','armv6l':'armhf'}.get(ansible_architecture, ansible_architecture) }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        repo: "deb [arch={{ {'x86_64':'amd64','aarch64':'arm64','armv7l':'armhf','armv6l':'armhf'}.get(ansible_architecture, ansible_architecture) }} signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
         state: present
 
     - name: Update apt and install Docker
