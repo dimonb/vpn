@@ -40,6 +40,14 @@ async def lifespan(app: FastAPI):
     logger.info(f"Config Host: {settings.config_host}")
     logger.info(f"IPv4 Block Prefix: /{settings.ipv4_block_prefix}")
     logger.info(f"IPv6 Block Prefix: /{settings.ipv6_block_prefix}")
+    if settings.enable_compaction:
+        logger.info(
+            f"Network Compaction: ENABLED (target: {settings.compact_target_max}, "
+            f"IPv4 min prefix: /{settings.compact_min_prefix_v4}, "
+            f"IPv6 min prefix: /{settings.compact_min_prefix_v6})"
+        )
+    else:
+        logger.info("Network Compaction: DISABLED")
 
     # Initialize proxy config if path is provided
     if settings.proxy_config:

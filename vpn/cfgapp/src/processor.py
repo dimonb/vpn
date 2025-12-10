@@ -66,9 +66,18 @@ class TemplateProcessor:
                 suffix,
                 ipv4_block_prefix=settings.ipv4_block_prefix,
                 ipv6_block_prefix=settings.ipv6_block_prefix,
+                enable_compaction=settings.enable_compaction,
+                compact_target_max=settings.compact_target_max,
+                compact_min_prefix_v4=settings.compact_min_prefix_v4,
+                compact_min_prefix_v6=settings.compact_min_prefix_v6,
+            )
+            compaction_info = (
+                f" [compacted to ~{settings.compact_target_max}]"
+                if settings.enable_compaction
+                else ""
             )
             print(
-                f"NETSET expanded {len(expanded)} entries (IPv4→/{settings.ipv4_block_prefix}, IPv6→/{settings.ipv6_block_prefix})"
+                f"NETSET expanded {len(expanded)} entries (IPv4→/{settings.ipv4_block_prefix}, IPv6→/{settings.ipv6_block_prefix}){compaction_info}"
             )
             return expanded
 

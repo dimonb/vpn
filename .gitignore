@@ -17,3 +17,6 @@ servers.ebac.cfg
 *.local.*
 .DS_Store
 amneziawg
+
+# Архивы экспериментальных файлов
+_archive_*/

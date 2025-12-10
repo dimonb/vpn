@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     ipv4_block_prefix: int = Field(default=18)
     ipv6_block_prefix: int = Field(default=32)
 
+    # Network compaction settings
+    enable_compaction: bool = Field(default=True)
+    compact_target_max: int = Field(default=200)
+    compact_min_prefix_v4: int = Field(default=11)
+    compact_min_prefix_v6: int = Field(default=32)
+
     # Server configuration
     host: str = Field(default="0.0.0.0")
     port: int = Field(default=8000)
