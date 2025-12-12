@@ -1,5 +1,29 @@
 {% set config = lookup('file', config_file | default('config.json')) | from_json %}
 {
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns_resolver",
+        "address": "9.9.9.9",
+        "strategy": "ipv4_only",
+        "detour": "direct-out"
+      },
+      {
+        "tag": "dns_quad9_doh",
+        "address": "https://dns.quad9.net/dns-query",
+        "address_resolver": "dns_resolver",
+        "strategy": "ipv4_only",
+        "detour": "direct-out"
+      }
+    ],
+    "rules": [
+      {
+        "outbound": "any",
+        "server": "dns_quad9_doh"
+      }
+    ],
+    "final": "dns_quad9_doh"
+  },
   "log": { "level": "info" },
   "inbounds": [
     {
@@ -226,6 +250,6 @@
     "final": {% if forward_group and config.subs.get(forward_group) %}"auto"{% elif forward_il_group and config.subs.get(forward_il_group) %}"auto-il"{% else %}"direct-out"{% endif %}
   }
   {% else %}
-  "outbounds": [{ "type": "direct" }]
+  "outbounds": [{ "type": "direct", "tag": "direct-out" }]
   {% endif %}
 }
