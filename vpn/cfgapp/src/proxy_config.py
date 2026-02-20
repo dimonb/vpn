@@ -152,6 +152,8 @@ class ProxyConfig:
             return self._generate_vmess_config(host, proxy_name)
         elif protocol == "vless":
             return self._generate_vless_config(host, proxy_name, user)
+        elif protocol == "vless-v2":
+            return self._generate_vless_v2_config(host, proxy_name, user)
         else:
             logger.warning(f"Unsupported protocol: {protocol}")
             return {}
@@ -325,6 +327,56 @@ class ProxyConfig:
             "udp": True,
         }
 
+    def _generate_vless_v2_config(
+        self, host: str, proxy_name: str, user: str | None = None
+    ) -> dict[str, Any]:
+        """Generate VLESS v2 proxy configuration.
+
+        Args:
+            host: Proxy host
+            proxy_name: Proxy name
+            user: Username for authentication (optional)
+
+        Returns:
+            VLESS v2 configuration dictionary
+        """
+        name = f"{proxy_name}"
+
+        # Generate UUID based on user + salt (same as server config)
+        if user:
+            import hashlib
+
+            base = f"{user}.{settings.salt}"
+            hash_val = hashlib.sha256(base.encode()).hexdigest()
+            # Convert to UUID format (8-4-4-4-12)
+            uuid = f"{hash_val[:8]}-{hash_val[8:12]}-{hash_val[12:16]}-{hash_val[16:20]}-{hash_val[20:32]}"
+        else:
+            uuid = self._generate_uuid(proxy_name)
+
+        port = settings.https_port
+
+        return {
+            "name": name,
+            "type": "vless",
+            "server": host,
+            "port": port,
+            "uuid": uuid,
+            "flow": "xtls-rprx-vision",
+            "network": "tcp",
+            "tls": True,
+            "servername": "www.icloud.com",
+            "client-fingerprint": "chrome",
+            "reality-opts": {
+                "allow-insecure": False,
+                "fingerprint": "chrome",
+                "mldsa65-verify": settings.xray_verify,
+                "public-key": settings.xray_publickey,
+                "short-id": "3e3e",
+                "show": False,
+                "spider-x": "/",
+            },
+        }
+
     def _generate_password(self, proxy_name: str) -> str:
         """Generate password for proxy.
 
@@ -423,7 +475,11 @@ class ProxyConfig:
             elif protocol == "vmess":
                 url = self._generate_vmess_url(config)
             elif protocol == "vless":
-                url = self._generate_vless_url(config)
+                is_v2 = "mldsa65-verify" in config.get("reality-opts", {})
+                if is_v2:
+                    url = self._generate_vless_v2_url(config)
+                else:
+                    url = self._generate_vless_url(config)
             else:
                 logger.warning(f"Unsupported protocol for ShadowRocket: {protocol}")
                 continue
@@ -559,6 +615,51 @@ class ProxyConfig:
             else "",
             "sid": settings.reality_short_id,
         }
+
+        query_string = urllib.parse.urlencode(params)
+        return f"vless://{uuid}@{server}:{port}?{query_string}"
+
+    def _generate_vless_v2_url(self, config: dict[str, Any]) -> str:
+        """Generate VLESS v2 URL for ShadowRocket.
+
+        Args:
+            config: VLESS configuration
+
+        Returns:
+            VLESS URL string
+        """
+        uuid = config["uuid"]
+        server = config["server"]
+        port = config["port"]
+        name = config["name"]
+
+        # Build query parameters for Reality protocol
+        reality_opts = config.get("reality-opts", {})
+        public_key = reality_opts.get(
+            "public-key",
+            settings.reality_public_key
+            if hasattr(settings, "reality_public_key")
+            else "",
+        )
+        short_id = reality_opts.get("short-id", settings.reality_short_id)
+        peer = config.get("servername", "www.icloud.com")
+
+        params = {
+            "remarks": name,
+            "tls": "1",
+            "peer": peer,
+            "alpn": "h2,http/1.1",
+            "xtls": "2",
+            "pbk": public_key,
+            "sid": short_id,
+        }
+
+        # Add mldsa65 verify if present (might be useful depending on shadowrocket updates)
+        mldsa65_verify = reality_opts.get("mldsa65-verify")
+        if mldsa65_verify:
+            # The exact param name depends on Shadowrocket implementation, adding custom pbk etc is usually suffice,
+            # but we can pass it if there is a known parameter or just append the verify key
+            params["mldsa65-verify"] = mldsa65_verify
 
         query_string = urllib.parse.urlencode(params)
         return f"vless://{uuid}@{server}:{port}?{query_string}"

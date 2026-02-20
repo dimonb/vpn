@@ -29,6 +29,12 @@
               ]
             },
             {
+              "match": [{ "tls": { "sni": ["www.icloud.com", "icloud.com"] } }],
+              "handle": [
+                { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:28443"] }] }
+              ]
+            },
+            {
               "handle": [
                 { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:4443"] }] }
               ]

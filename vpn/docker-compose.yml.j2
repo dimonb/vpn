@@ -1,5 +1,13 @@
 
 services:
+  xray:
+    image: ghcr.io/xtls/xray-core:26.2.6
+    restart: unless-stopped
+    volumes:
+      - ./xray.json:/etc/xray/config.json:ro
+    command: ["run", "-c", "/etc/xray/config.json"]
+    ports:
+      - "127.0.0.1:28443:28443"
   sing-box:
     image: itdoginfo/sing-box:v1.12.12
     restart: unless-stopped
@@ -54,6 +62,10 @@ services:
       - REALITY_PRIVATE_KEY={{ reality_private_key }}
       - REALITY_PUBLIC_KEY={{ reality_public_key }}
       - REALITY_SHORT_ID={{ reality_short_id }}
+      - XRAY_MLDSA65SEED={{ xray_mldsa65seed }}
+      - XRAY_PRIVATEKEY={{ xray_privatekey }}
+      - XRAY_PUBLICKEY={{ xray_publickey }}
+      - XRAY_VERIFY={{ xray_verify }}
       - SALT={{ salt }}
       - IPV4_BLOCK_PREFIX=18
       - IPV6_BLOCK_PREFIX=32

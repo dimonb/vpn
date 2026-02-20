@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     reality_private_key: str = Field(default="")
     reality_public_key: str = Field(default="")
     reality_short_id: str = Field(default="c047f3e99c90ff71")
+    xray_mldsa65seed: str = Field(default="")
+    xray_privatekey: str = Field(default="")
+    xray_publickey: str = Field(default="")
+    xray_verify: str = Field(default="")
     base_url: str = Field(default="")
 
     # Logging
@@ -50,5 +54,3 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
-
-

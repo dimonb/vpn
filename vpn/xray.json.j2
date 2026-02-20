@@ -1,0 +1,142 @@
+{% set config = lookup('file', config_file | default('config.json')) | from_json %}
+{
+  "log": {
+    "access": "none",
+    "dnsLog": false,
+    "error": "",
+    "loglevel": "warning",
+    "maskAddress": ""
+  },
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "blocked",
+        "type": "field"
+      },
+      {
+        "outboundTag": "blocked",
+        "protocol": [
+          "bittorrent"
+        ],
+        "type": "field"
+      }
+    ]
+  },
+  "dns": null,
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 28443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {% for user in config.users %}
+          {
+            "email": "{{ user }}",
+            "flow": "xtls-rprx-vision",
+            "id": "{{ (user + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}"
+          }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        ],
+        "decryption": "none",
+        "encryption": "none",
+        "testseed": [
+          900,
+          500,
+          900,
+          256
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "realitySettings": {
+          "maxClientVer": "",
+          "maxTimediff": 0,
+          "minClientVer": "",
+          "mldsa65Seed": "{{ xray_mldsa65seed }}",
+          "privateKey": "{{ xray_privatekey }}",
+          "serverNames": [
+            "www.icloud.com",
+            "icloud.com"
+          ],
+          "shortIds": [
+            "3e3e",
+            "81be0fb2",
+            "6c",
+            "bf05fa38a151",
+            "6a24b5bb54de405e",
+            "dd869908b24387",
+            "693771",
+            "7371a044dc"
+          ],
+          "show": false,
+          "target": "www.icloud.com:443",
+          "xver": 0
+        },
+        "security": "reality",
+        "tcpSettings": {
+          "acceptProxyProtocol": false,
+          "header": {
+            "type": "none"
+          }
+        }
+      },
+      "tag": "inbound-8443",
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic",
+          "fakedns"
+        ],
+        "metadataOnly": false,
+        "routeOnly": false
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {
+        "domainStrategy": "AsIs",
+        "noises": [],
+        "redirect": ""
+      },
+      "tag": "direct"
+    },
+    {
+      "protocol": "blackhole",
+      "settings": {},
+      "tag": "blocked"
+    }
+  ],
+  "transport": null,
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserDownlink": true,
+        "statsUserUplink": true
+      }
+    },
+    "system": {
+      "statsInboundDownlink": true,
+      "statsInboundUplink": true,
+      "statsOutboundDownlink": false,
+      "statsOutboundUplink": false
+    }
+  },
+  "stats": {},
+  "reverse": null,
+  "fakedns": null,
+  "observatory": null,
+  "burstObservatory": null,
+  "metrics": {
+    "listen": "127.0.0.1:11111",
+    "tag": "metrics_out"
+  }
+}

@@ -1,28 +1,27 @@
 {% set config = lookup('file', config_file | default('config.json')) | from_json %}
 {
   "dns": {
+    "strategy": "ipv4_only",
     "servers": [
       {
-        "tag": "dns_resolver",
-        "address": "9.9.9.9",
-        "strategy": "ipv4_only",
-        "detour": "direct-out"
+        "tag": "bootstrap",
+        "type": "udp",
+        "server": "9.9.9.9"
       },
       {
-        "tag": "dns_quad9_doh",
-        "address": "https://dns.quad9.net/dns-query",
-        "address_resolver": "dns_resolver",
-        "strategy": "ipv4_only",
-        "detour": "direct-out"
+        "tag": "quad9-doh",
+        "type": "https",
+        "server": "dns.quad9.net",
+        "path": "/dns-query",
+        "domain_resolver": "bootstrap"
       }
     ],
     "rules": [
       {
-        "outbound": "any",
-        "server": "dns_quad9_doh"
+        "server": "quad9-doh"
       }
     ],
-    "final": "dns_quad9_doh"
+    "final": "quad9-doh"
   },
   "log": { "level": "info" },
   "inbounds": [

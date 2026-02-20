@@ -14,7 +14,7 @@
         state: directory
         owner: "{{ config_owner }}"
         group: "{{ config_group }}"
-        mode: '0700'
+        mode: "0700"
 
     - name: Ensure the cert directory exists
       ansible.builtin.file:
@@ -22,14 +22,13 @@
         state: directory
         owner: "{{ config_owner }}"
         group: "{{ config_group }}"
-        mode: '0700'
+        mode: "0700"
 
     - name: Generate self-signed certificate
       ansible.builtin.shell:
         cmd: openssl req -x509 -newkey rsa:4096 -keyout {{ config_directory }}/cert/key.pem -out {{ config_directory }}/cert/cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=i.am.com"
       args:
         creates: "{{ config_directory }}/cert/cert.pem"
-
 
     # - name: copy caddy files and configs to the server
     #   ansible.builtin.synchronize:
@@ -56,7 +55,7 @@
         path: "{{ config_directory }}/cfgapp"
         owner: "{{ config_owner }}"
         group: "{{ config_group }}"
-        mode: '0755'
+        mode: "0755"
         recurse: true
 
     - name: copy static files to the server
@@ -71,7 +70,7 @@
         path: "{{ config_directory }}/static"
         owner: "{{ config_owner }}"
         group: "{{ config_group }}"
-        mode: '0755'
+        mode: "0755"
         recurse: true
 
     - name: Deploy configuration files using templates
@@ -82,12 +81,25 @@
         group: "{{ config_group }}"
         mode: "{{ item.mode }}"
       loop:
-        - { src: "{{ config_file | default('./config.json') }}", dest: 'config.json', mode: '0644' }
-        - { src: './vpn/sing-box.json.j2', dest: 'sing-box.json', mode: '0644' }
-        - { src: './vpn/docker-compose.yml.j2', dest: 'docker-compose.yml', mode: '0644' }
-        - { src: './vpn/caddy.json.j2', dest: 'caddy.json', mode: '0644' }
-        - { src: './vpn/hysteria.yaml.j2', dest: 'hysteria.yaml', mode: '0644' }
-        - { src: './vpn/json-exporter.yml', dest: 'json-exporter.yml', mode: '0644' }
+        - {
+            src: "{{ config_file | default('./config.json') }}",
+            dest: "config.json",
+            mode: "0644",
+          }
+        - { src: "./vpn/sing-box.json.j2", dest: "sing-box.json", mode: "0644" }
+        - { src: "./vpn/xray.json.j2", dest: "xray.json", mode: "0644" }
+        - {
+            src: "./vpn/docker-compose.yml.j2",
+            dest: "docker-compose.yml",
+            mode: "0644",
+          }
+        - { src: "./vpn/caddy.json.j2", dest: "caddy.json", mode: "0644" }
+        - { src: "./vpn/hysteria.yaml.j2", dest: "hysteria.yaml", mode: "0644" }
+        - {
+            src: "./vpn/json-exporter.yml",
+            dest: "json-exporter.yml",
+            mode: "0644",
+          }
 
     - name: Build docker-compose apps
       ansible.builtin.shell:
@@ -98,4 +110,4 @@
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"
         cmd: docker compose up --pull always --remove-orphans --force-recreate -d
-#docker compose down && 
+#docker compose down &&

@@ -14,7 +14,7 @@ ENV_FILE ?= ".env"
 # Load environment variables from .env file
 ifneq (,$(wildcard ./$(ENV_FILE)))
     include $(ENV_FILE)
-    export SALT OBFS_PASSWORD METRICS_PWD BASE_URL REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY REALITY_SHORT_ID
+    export SALT OBFS_PASSWORD METRICS_PWD BASE_URL REALITY_PRIVATE_KEY REALITY_PUBLIC_KEY REALITY_SHORT_ID XRAY_MLDSA65SEED XRAY_PRIVATEKEY XRAY_PUBLICKEY XRAY_VERIFY
 endif
 
 # Default values if .env file doesn't exist
@@ -26,6 +26,10 @@ VLESS_PORT ?= "8443"
 REALITY_PRIVATE_KEY ?= "your-reality-private-key-here"
 REALITY_PUBLIC_KEY ?= "your-reality-public-key-here"
 REALITY_SHORT_ID ?= "c047f3e99c90ff71"
+XRAY_MLDSA65SEED ?= ""
+XRAY_PRIVATEKEY ?= ""
+XRAY_PUBLICKEY ?= ""
+XRAY_VERIFY ?= ""
 CONFIG_HOST ?= "fake.host"
 
 CONFIG_FILE ?= "config.json"
@@ -36,7 +40,7 @@ TEST_ONLY ?= ""
 
 # Common Ansible arguments
 ANSIBLE_ARGS := -i $(SERVERS_FILE) --ssh-extra-args='-o ControlPersist=60s'$(if $(filter-out "",$(TEST_ONLY)), --limit $(TEST_ONLY),)
-ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "vless_port=$(VLESS_PORT)" -e "reality_private_key=$(REALITY_PRIVATE_KEY)" -e "reality_public_key=$(REALITY_PUBLIC_KEY)" -e "reality_short_id=$(REALITY_SHORT_ID)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$${METRICS_PWD:-}" -e "config_file=$(CONFIG_FILE)"
+ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "vless_port=$(VLESS_PORT)" -e "reality_private_key=$(REALITY_PRIVATE_KEY)" -e "reality_public_key=$(REALITY_PUBLIC_KEY)" -e "reality_short_id=$(REALITY_SHORT_ID)" -e "xray_mldsa65seed=$(XRAY_MLDSA65SEED)" -e "xray_privatekey=$(XRAY_PRIVATEKEY)" -e "xray_publickey=$(XRAY_PUBLICKEY)" -e "xray_verify=$(XRAY_VERIFY)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$${METRICS_PWD:-}" -e "config_file=$(CONFIG_FILE)"
 
 .PHONY: install-docker check-env deploy deploy-test cn passwords ubuntu-update ubuntu-upgrade amneziawg-install
 
@@ -90,7 +94,7 @@ render-template-test:
 cfgapp-dev:
 	@source $(ENV_FILE) 2>/dev/null || true; \
 	cfg_path=$$(pwd)/$(CONFIG_FILE); \
-	cd vpn/cfgapp && BASE_URL=$${BASE_URL:-} OBFS_PASSWORD=$${OBFS_PASSWORD:-} PROXY_CONFIG=$$cfg_path HYSTERIA2_PORT=$(HYSTERIA2_PORT) HYSTERIA2_V2_PORT=$(HYSTERIA2_V2_PORT) VLESS_PORT=$(VLESS_PORT) REALITY_PRIVATE_KEY=$${REALITY_PRIVATE_KEY:-} REALITY_PUBLIC_KEY=$${REALITY_PUBLIC_KEY:-} REALITY_SHORT_ID=$${REALITY_SHORT_ID:-} SALT=$${SALT:-} CONFIG_HOST=$(CONFIG_HOST) IPV4_BLOCK_PREFIX=$(IPV4_BLOCK_PREFIX) IPV6_BLOCK_PREFIX=$(IPV6_BLOCK_PREFIX) .venv/bin/poetry run python -m src.main
+	cd vpn/cfgapp && BASE_URL=$${BASE_URL:-} OBFS_PASSWORD=$${OBFS_PASSWORD:-} PROXY_CONFIG=$$cfg_path HYSTERIA2_PORT=$(HYSTERIA2_PORT) HYSTERIA2_V2_PORT=$(HYSTERIA2_V2_PORT) VLESS_PORT=$(VLESS_PORT) REALITY_PRIVATE_KEY=$${REALITY_PRIVATE_KEY:-} REALITY_PUBLIC_KEY=$${REALITY_PUBLIC_KEY:-} REALITY_SHORT_ID=$${REALITY_SHORT_ID:-} XRAY_MLDSA65SEED=$${XRAY_MLDSA65SEED:-} XRAY_PRIVATEKEY=$${XRAY_PRIVATEKEY:-} XRAY_PUBLICKEY=$${XRAY_PUBLICKEY:-} XRAY_VERIFY=$${XRAY_VERIFY:-} SALT=$${SALT:-} CONFIG_HOST=$(CONFIG_HOST) IPV4_BLOCK_PREFIX=$(IPV4_BLOCK_PREFIX) IPV6_BLOCK_PREFIX=$(IPV6_BLOCK_PREFIX) .venv/bin/poetry run python -m src.main
 
 
 passwords:
