@@ -98,7 +98,7 @@
       "outbounds": [
         {% set hy_tags = [] %}
         {% for name, item in config.subs[forward_group].items() %}
-          {% if item.protocol | lower | regex_search('^hy2') %}
+          {% if item.protocol | lower | regex_search('^hy2|^vless-v2') %}
             {% set _ = hy_tags.append(item.host) %}
           {% endif %}
         {% endfor %}
@@ -116,7 +116,7 @@
       "outbounds": [
         {% set hy_il_tags = [] %}
         {% for name, item in config.subs[forward_il_group].items() %}
-          {% if item.protocol | lower | regex_search('^hy2') %}
+          {% if item.protocol | lower | regex_search('^hy2|^vless-v2') %}
             {% set _ = hy_il_tags.append(item.host) %}
           {% endif %}
         {% endfor %}
@@ -147,6 +147,31 @@
         "insecure": true
       }
     }
+      {% elif item.protocol | lower == 'vless-v2' %}
+    ,
+    {
+      "type": "vless",
+      "tag": "{{ item.host }}",
+      "server": "{{ item.host }}",
+      "server_port": {{ https_port | default(443) }},
+      "uuid": "{{ ('system' + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}",
+      "flow": "xtls-rprx-vision",
+      "network": "tcp",
+      "tls": {
+        "enabled": true,
+        "alpn": ["h2", "http/1.1"],
+        "server_name": "www.icloud.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "{{ xray_publickey }}",
+          "short_id": "3e3e"
+        }
+      }
+    }
       {% endif %}
     {% endfor %}
     {% endif %}
@@ -168,6 +193,31 @@
         "enabled": true,
         "alpn": ["h3"],
         "insecure": true
+      }
+    }
+      {% elif item.protocol | lower == 'vless-v2' %}
+    ,
+    {
+      "type": "vless",
+      "tag": "{{ item.host }}",
+      "server": "{{ item.host }}",
+      "server_port": {{ https_port | default(443) }},
+      "uuid": "{{ ('system' + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}",
+      "flow": "xtls-rprx-vision",
+      "network": "tcp",
+      "tls": {
+        "enabled": true,
+        "alpn": ["h2", "http/1.1"],
+        "server_name": "www.icloud.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "{{ xray_publickey }}",
+          "short_id": "3e3e"
+        }
       }
     }
       {% endif %}

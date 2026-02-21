@@ -19,7 +19,7 @@
       file:
         path: /etc/apt/keyrings
         state: directory
-        mode: '0755'
+        mode: "0755"
 
     - name: Add Docker GPG key (dearmored) to keyring
       shell: |
@@ -32,7 +32,7 @@
       file:
         path: /etc/apt/keyrings/docker.gpg
         state: file
-        mode: '0644'
+        mode: "0644"
 
     - name: Add Docker repository
       apt_repository:
@@ -70,7 +70,7 @@
           }
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
 
     - name: Find existing Docker log files
       ansible.builtin.find:
@@ -88,9 +88,34 @@
       when: (docker_logs.files | default([])) | length > 0
       loop_control:
         label: "{{ item.path }}"
-        
+
     - name: Restart Docker to apply log config
       systemd:
         name: docker
         state: restarted
         enabled: yes
+
+    - name: Ensure tcp_bbr module is loaded on boot
+      copy:
+        content: "tcp_bbr\n"
+        dest: /etc/modules-load.d/bbr.conf
+        mode: "0644"
+
+    - name: Load tcp_bbr kernel module
+      modprobe:
+        name: tcp_bbr
+        state: present
+
+    - name: Enable BBR network qdisc
+      sysctl:
+        name: net.core.default_qdisc
+        value: fq
+        state: present
+        reload: yes
+
+    - name: Enable BBR TCP congestion control
+      sysctl:
+        name: net.ipv4.tcp_congestion_control
+        value: bbr
+        state: present
+        reload: yes
