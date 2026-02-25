@@ -361,6 +361,7 @@ class ProxyConfig:
             "server": host,
             "port": port,
             "uuid": uuid,
+            "udp": True,
             "flow": "xtls-rprx-vision",
             "network": "tcp",
             "tls": True,
