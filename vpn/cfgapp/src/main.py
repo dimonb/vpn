@@ -1,13 +1,15 @@
 """Main FastAPI application for CFG proxy processing."""
 
+import json
 import logging
 from contextlib import asynccontextmanager
 
 import httpx
+import yaml
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
-from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .auth import extract_template_tags, require_auth
@@ -73,6 +75,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     """Handle HTTP exceptions including 404 errors."""
@@ -89,6 +92,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         headers={"content-type": "text/plain; charset=utf-8"},
     )
 
+
 @app.exception_handler(FastAPIHTTPException)
 async def fastapi_http_exception_handler(request: Request, exc: FastAPIHTTPException):
     """Handle FastAPI HTTP exceptions."""
@@ -98,6 +102,7 @@ async def fastapi_http_exception_handler(request: Request, exc: FastAPIHTTPExcep
         status_code=exc.status_code,
         headers={"content-type": "text/plain; charset=utf-8"},
     )
+
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
@@ -126,16 +131,16 @@ async def forward_request(request: Request, path_with_search: str) -> httpx.Resp
             return response
     except httpx.ConnectError as e:
         logger.error(f"Connection error to origin: {e}")
-        raise HTTPException(status_code=502, detail="Bad Gateway")
+        raise HTTPException(status_code=502, detail="Bad Gateway") from e
     except httpx.TimeoutException as e:
         logger.error(f"Timeout error to origin: {e}")
-        raise HTTPException(status_code=504, detail="Gateway Timeout")
+        raise HTTPException(status_code=504, detail="Gateway Timeout") from e
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP status error from origin: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Unexpected error to origin: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error")
+        raise HTTPException(status_code=500, detail="Internal Server Error") from e
 
 
 @app.get("/health")
@@ -241,6 +246,9 @@ async def proxy_handler(request: Request, path: str):
         url = request.url
         path_with_params = url.path + ("?" + url.query if url.query else "")
 
+        query_params = dict(request.query_params)
+        wants_json = str(query_params.get("json", "")).lower() == "true"
+
         logger.info(f"Incoming: {url}")
 
         # First, try to forward the request to origin
@@ -253,37 +261,50 @@ async def proxy_handler(request: Request, path: str):
                 # Clean up headers to avoid Content-Length conflicts
                 clean_headers = {}
                 for key, value in response.headers.items():
-                    if key.lower() not in ['content-length', 'transfer-encoding']:
+                    if key.lower() not in ["content-length", "transfer-encoding"]:
                         clean_headers[key] = value
-                
+
+                content_to_return = response.content
                 # If content is gzipped, we need to decompress it and remove content-length
-                if 'content-encoding' in response.headers and 'gzip' in response.headers.get('content-encoding', ''):
+                if (
+                    "content-encoding" in response.headers
+                    and "gzip" in response.headers.get("content-encoding", "")
+                ):
                     import gzip
+
                     try:
                         # Check if content actually starts with gzip magic bytes
-                        if response.content.startswith(b'\x1f\x8b'):
+                        if response.content.startswith(b"\x1f\x8b"):
                             # Decompress the content
-                            decompressed_content = gzip.decompress(response.content)
+                            content_to_return = gzip.decompress(response.content)
                             # Remove content-length since we're changing the content size
-                            clean_headers.pop('content-length', None)
-                            return Response(
-                                content=decompressed_content,
-                                status_code=response.status_code,
-                                headers=clean_headers,
-                            )
+                            clean_headers.pop("content-length", None)
                         else:
                             # Content is not actually gzipped, just remove the misleading header
-                            logger.info("Content has gzip header but is not actually compressed")
-                            clean_headers.pop('content-encoding', None)
-                            clean_headers.pop('content-length', None)
+                            logger.info(
+                                "Content has gzip header but is not actually compressed"
+                            )
+                            clean_headers.pop("content-encoding", None)
+                            clean_headers.pop("content-length", None)
                     except Exception as e:
                         logger.warning(f"Failed to decompress gzipped content: {e}")
                         # Fallback to original content without problematic headers
-                        clean_headers.pop('content-encoding', None)
-                        clean_headers.pop('content-length', None)
-                
+                        clean_headers.pop("content-encoding", None)
+                        clean_headers.pop("content-length", None)
+
+                if wants_json:
+                    parsed_yaml = yaml.safe_load(content_to_return)
+                    if isinstance(parsed_yaml, dict | list):
+                        clean_headers["content-type"] = "application/json"
+                        return Response(
+                            content=json.dumps(parsed_yaml),
+                            status_code=response.status_code,
+                            headers=clean_headers,
+                            media_type="application/json",
+                        )
+
                 return Response(
-                    content=response.content,
+                    content=content_to_return,
                     status_code=response.status_code,
                     headers=clean_headers,
                 )
@@ -302,7 +323,9 @@ async def proxy_handler(request: Request, path: str):
         try:
             tpl_response = await forward_request(request, tpl_path)
             if not tpl_response.is_success:
-                logger.info(f"Template not found for path: {url.path} (status: {tpl_response.status_code})")
+                logger.info(
+                    f"Template not found for path: {url.path} (status: {tpl_response.status_code})"
+                )
                 # Return simple 404 response, Caddy will handle the HTML
                 return Response(
                     content="Not Found",
@@ -351,6 +374,15 @@ async def proxy_handler(request: Request, path: str):
                 final_body = await template_processor.process_template(
                     tpl_text, request.headers.get("host", ""), request_headers
                 )
+
+            if wants_json:
+                parsed_yaml = yaml.safe_load(final_body)
+                if isinstance(parsed_yaml, dict | list):
+                    return Response(
+                        content=json.dumps(parsed_yaml),
+                        status_code=200,
+                        media_type="application/json",
+                    )
 
             return Response(
                 content=final_body,
