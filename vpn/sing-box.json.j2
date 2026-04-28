@@ -156,7 +156,7 @@
       "server_port": {{ https_port | default(443) }},
       "uuid": "{{ ('system' + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}",
       "flow": "xtls-rprx-vision",
-      "network": "tcp",
+      "packet_encoding": "xudp",
       "tls": {
         "enabled": true,
         "alpn": ["h2", "http/1.1"],

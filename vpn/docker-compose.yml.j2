@@ -9,7 +9,9 @@ services:
     ports:
       - "127.0.0.1:28443:28443"
   sing-box:
-    image: itdoginfo/sing-box:v1.12.12
+    image: itdoginfo/sing-box:v1.13.1
+    environment:
+      - ENABLE_DEPRECATED_MISSING_DOMAIN_RESOLVER=true
     restart: unless-stopped
     network_mode: host
     volumes:
