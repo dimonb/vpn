@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
+from .happ_processor import HappProcessor
 from .processor import TemplateProcessor
 from .proxy_config import ProxyConfig
 
@@ -367,6 +368,12 @@ async def proxy_handler(request: Request, path: str):
                 # Process as CLASH YAML
                 clash_processor = ClashProcessor(template_processor, proxy_config)
                 final_body = await clash_processor.process_clash_config(
+                    tpl_text, request.headers.get("host", ""), request_headers
+                )
+            elif "HAPP" in tags:
+                # Process as HAPP template (PROXY_LIST → proxy URLs)
+                happ_processor = HappProcessor(template_processor, proxy_config)
+                final_body = await happ_processor.process_happ_config(
                     tpl_text, request.headers.get("host", ""), request_headers
                 )
             else:

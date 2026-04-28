@@ -442,6 +442,43 @@ class ProxyConfig:
         proxy_configs = self.generate_proxy_configs(sub_name, password, None)
         return [config["name"] for config in proxy_configs]
 
+    def get_proxy_urls(
+        self,
+        sub_name: str | None = None,
+        password: str | None = None,
+        user: str | None = None,
+    ) -> list[str]:
+        """Build proxy URLs (vless://, hysteria2://, vmess://) for a subscription."""
+        proxy_configs = self.generate_proxy_configs(sub_name, password, user)
+        urls = []
+
+        for config in proxy_configs:
+            protocol = config.get("type", "")
+            if protocol == "hysteria2":
+                if config.get("port") == settings.hysteria2_v2_port:
+                    user_password = (
+                        f"{user}:{password}" if user and password else password
+                    )
+                    url = self._generate_hysteria2_v2_url(config, user_password)
+                else:
+                    url = self._generate_hysteria2_url(config)
+            elif protocol == "vmess":
+                url = self._generate_vmess_url(config)
+            elif protocol == "vless":
+                is_v2 = "mldsa65-verify" in config.get("reality-opts", {})
+                if is_v2:
+                    url = self._generate_vless_v2_url(config)
+                else:
+                    url = self._generate_vless_url(config)
+            else:
+                logger.warning(f"Unsupported protocol: {protocol}")
+                continue
+
+            if url:
+                urls.append(url)
+
+        return urls
+
     def generate_shadowrocket_subscription(
         self,
         sub_name: str | None = None,
@@ -458,37 +495,7 @@ class ProxyConfig:
         Returns:
             Base64 encoded subscription URLs
         """
-        proxy_configs = self.generate_proxy_configs(sub_name, password, user)
-        urls = []
-
-        for config in proxy_configs:
-            protocol = config.get("type", "")
-            if protocol == "hysteria2":
-                # Check if this is hy2-v2 by looking at the port
-                if config.get("port") == settings.hysteria2_v2_port:
-                    # For hy2-v2, create user:password format
-                    user_password = (
-                        f"{user}:{password}" if user and password else password
-                    )
-                    url = self._generate_hysteria2_v2_url(config, user_password)
-                else:
-                    url = self._generate_hysteria2_url(config)
-            elif protocol == "vmess":
-                url = self._generate_vmess_url(config)
-            elif protocol == "vless":
-                is_v2 = "mldsa65-verify" in config.get("reality-opts", {})
-                if is_v2:
-                    url = self._generate_vless_v2_url(config)
-                else:
-                    url = self._generate_vless_url(config)
-            else:
-                logger.warning(f"Unsupported protocol for ShadowRocket: {protocol}")
-                continue
-
-            if url:
-                urls.append(url)
-
-        # Join URLs with newlines and encode to base64
+        urls = self.get_proxy_urls(sub_name, password, user)
         subscription_content = "\n".join(urls)
         return base64.b64encode(subscription_content.encode()).decode()
 
