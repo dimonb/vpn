@@ -83,6 +83,36 @@ def test_replace_proxy_list_substitutes_urls(
     assert "happ://routing/onadd/" in out
 
 
+def test_vless_url_happ_format(
+    template_processor: TemplateProcessor, proxy_config: ProxyConfig
+) -> None:
+    happ = HappProcessor(template_processor, proxy_config)
+    out = happ.replace_proxy_list(HAPP_TPL, request_headers={"x-query-string": "u=dimonb"})
+
+    vless_lines = [line for line in out.split("\n") if line.startswith("vless://")]
+    assert vless_lines, "expected at least one vless URL"
+    sample = vless_lines[0]
+    # Standard xray-style params present
+    for token in (
+        "type=tcp",
+        "security=reality",
+        "encryption=none",
+        "flow=xtls-rprx-vision",
+        "fp=chrome",
+        "packet_encoding=xudp",
+        "packetEncoding=xudp",
+        "xudp=1",
+    ):
+        assert token in sample, f"missing {token} in {sample}"
+    # Shadowrocket-only params absent
+    assert "remarks=" not in sample
+    assert "tls=1" not in sample
+    assert "xtls=2" not in sample
+    # Name placed in fragment after #
+    assert "#" in sample
+    assert sample.split("#", 1)[1]
+
+
 def test_replace_proxy_list_no_proxy_config(template_processor: TemplateProcessor) -> None:
     happ = HappProcessor(template_processor, proxy_config=None)
     out = happ.replace_proxy_list(HAPP_TPL, request_headers={})

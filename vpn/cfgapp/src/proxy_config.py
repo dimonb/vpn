@@ -447,8 +447,14 @@ class ProxyConfig:
         sub_name: str | None = None,
         password: str | None = None,
         user: str | None = None,
+        flavor: str = "shadowrocket",
     ) -> list[str]:
-        """Build proxy URLs (vless://, hysteria2://, vmess://) for a subscription."""
+        """Build proxy URLs (vless://, hysteria2://, vmess://) for a subscription.
+
+        flavor:
+            - "shadowrocket" (default): Shadowrocket-compatible URLs
+            - "happ": standard xray-style URLs for HAPP clients
+        """
         proxy_configs = self.generate_proxy_configs(sub_name, password, user)
         urls = []
 
@@ -466,10 +472,18 @@ class ProxyConfig:
                 url = self._generate_vmess_url(config)
             elif protocol == "vless":
                 is_v2 = "mldsa65-verify" in config.get("reality-opts", {})
-                if is_v2:
-                    url = self._generate_vless_v2_url(config)
+                if flavor == "happ":
+                    url = (
+                        self._generate_vless_v2_url_happ(config)
+                        if is_v2
+                        else self._generate_vless_url_happ(config)
+                    )
                 else:
-                    url = self._generate_vless_url(config)
+                    url = (
+                        self._generate_vless_v2_url(config)
+                        if is_v2
+                        else self._generate_vless_url(config)
+                    )
             else:
                 logger.warning(f"Unsupported protocol: {protocol}")
                 continue
@@ -671,6 +685,80 @@ class ProxyConfig:
 
         query_string = urllib.parse.urlencode(params)
         return f"vless://{uuid}@{server}:{port}?{query_string}"
+
+    def _generate_vless_url_happ(self, config: dict[str, Any]) -> str:
+        """Generate standard (xray-style) VLESS Reality URL for HAPP."""
+        uuid = config["uuid"]
+        server = config["server"]
+        port = config["port"]
+        name = config["name"]
+
+        public_key = (
+            settings.reality_public_key
+            if hasattr(settings, "reality_public_key")
+            else ""
+        )
+
+        params = {
+            "type": "tcp",
+            "security": "reality",
+            "encryption": "none",
+            "flow": "xtls-rprx-vision",
+            "sni": "ok.ru",
+            "peer": "ok.ru",
+            "fp": "chrome",
+            "alpn": "h2,http/1.1",
+            "xudp": "1",
+            "packetEncoding": "xudp",
+            "packet_encoding": "xudp",
+            "pbk": public_key,
+            "sid": settings.reality_short_id,
+        }
+
+        query_string = urllib.parse.urlencode(params)
+        fragment = urllib.parse.quote(name)
+        return f"vless://{uuid}@{server}:{port}?{query_string}#{fragment}"
+
+    def _generate_vless_v2_url_happ(self, config: dict[str, Any]) -> str:
+        """Generate standard (xray-style) VLESS v2 Reality URL for HAPP."""
+        uuid = config["uuid"]
+        server = config["server"]
+        port = config["port"]
+        name = config["name"]
+
+        reality_opts = config.get("reality-opts", {})
+        public_key = reality_opts.get(
+            "public-key",
+            settings.reality_public_key
+            if hasattr(settings, "reality_public_key")
+            else "",
+        )
+        short_id = reality_opts.get("short-id", settings.reality_short_id)
+        peer = config.get("servername", "www.icloud.com")
+
+        params = {
+            "type": "tcp",
+            "security": "reality",
+            "encryption": "none",
+            "flow": "xtls-rprx-vision",
+            "sni": peer,
+            "peer": peer,
+            "fp": "chrome",
+            "alpn": "h2,http/1.1",
+            "xudp": "1",
+            "packetEncoding": "xudp",
+            "packet_encoding": "xudp",
+            "pbk": public_key,
+            "sid": short_id,
+        }
+
+        mldsa65_verify = reality_opts.get("mldsa65-verify")
+        if mldsa65_verify:
+            params["mldsa65Verify"] = mldsa65_verify
+
+        query_string = urllib.parse.urlencode(params)
+        fragment = urllib.parse.quote(name)
+        return f"vless://{uuid}@{server}:{port}?{query_string}#{fragment}"
 
     def generate_subscription_url(
         self,

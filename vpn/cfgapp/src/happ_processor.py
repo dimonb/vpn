@@ -40,7 +40,7 @@ class HappProcessor:
             return tpl_text
 
         sub_name, password, user = self._extract_query_params(request_headers)
-        urls = self.proxy_config.get_proxy_urls(sub_name, password, user)
+        urls = self.proxy_config.get_proxy_urls(sub_name, password, user, flavor="happ")
         logger.info(f"HAPP: replacing PROXY_LIST with {len(urls)} URL(s)")
 
         replacement = "\n".join(urls)
