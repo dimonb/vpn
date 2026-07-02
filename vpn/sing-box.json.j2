@@ -1,4 +1,9 @@
 {% set config = lookup('file', config_file | default('config.json')) | from_json %}
+{% set proxy_cfg = (config.get('proxy') if config is mapping else none) %}
+{% set host_cfg = (proxy_cfg.get(ansible_host) if proxy_cfg is mapping and proxy_cfg.get(ansible_host) else none) %}
+{% set features = (host_cfg.get('features') if host_cfg is mapping else none) %}
+{% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
+{% set forward_il_group = (features.get('forward-il') if features is mapping else none) %}
 {
   "dns": {
     "strategy": "ipv4_only",
@@ -13,7 +18,8 @@
         "type": "https",
         "server": "dns.quad9.net",
         "path": "/dns-query",
-        "domain_resolver": "bootstrap"
+        "domain_resolver": "bootstrap"{% if forward_group and config.subs.get(forward_group) %},
+        "detour": "auto"{% endif %}
       }
     ],
     "rules": [
@@ -83,11 +89,6 @@
       }
     }
   ],
-  {% set proxy_cfg = (config.get('proxy') if config is mapping else none) %}
-  {% set host_cfg = (proxy_cfg.get(ansible_host) if proxy_cfg is mapping and proxy_cfg.get(ansible_host) else none) %}
-  {% set features = (host_cfg.get('features') if host_cfg is mapping else none) %}
-  {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
-  {% set forward_il_group = (features.get('forward-il') if features is mapping else none) %}
   {% if (forward_group and config.subs.get(forward_group)) or (forward_il_group and config.subs.get(forward_il_group)) %}
   "outbounds": [
     { "type": "direct", "tag": "direct-out" },
@@ -225,6 +226,7 @@
     {% endif %}
   ],
   "route": {
+    "default_domain_resolver": { "server": "bootstrap" },
     "rules": [
       { "ip_is_private": true, "outbound": "direct-out" },
       { "rule_set": "geosite-google", "outbound": "auto" },
