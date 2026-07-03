@@ -92,6 +92,24 @@ diff <(python3 -m json.tool /tmp/live.json) <(python3 -m json.tool /tmp/rendered
    Client subscription links are produced by the `cfgapp` service (`BASE_URL`), or `make cfgapp-dev`
    to run it locally.
 
+## Route a specific site (direct / to an exit)
+
+Per-site routing lives in `vpn/sing-box.json.j2` (relay-gated). The inline `domain-ru` rule_set is the
+single source of truth — it drives both the DNS rule (`{"rule_set":"domain-ru","server":"local-dns"}`)
+and the route rule (`domain-ru → direct-out`). See AGENTS.md → "Per-site routing" for the decision.
+
+- **RU-IP site, reachable & not blocked** (e.g. `fanfics.me`) — resolve local + go direct: add it to
+  the `domain-ru` rule_set (`{"domain":["site"]}` + `{"domain_suffix":[".site"]}`), then deploy. Verify
+  it egresses via `direct-out` and is fast (not the RU→EU→RU detour).
+- **Censored-in-RU + Cloudflare-fronted site** (e.g. `ficbook.net`) — must go through a tunnel; pin it
+  to an exit with a `route.rules` entry gated on that exit being a forward member (see the existing
+  `ficbook.net → am-1.outline.ebac.dev` rule guarded by `'am-1.outline.ebac.dev' in fwd_hosts`). curl
+  will still show Cloudflare's JS challenge (403) — verify in a **real browser**; routing is confirmed
+  by the log line `outbound/hysteria2[<exit>]: outbound connection to <site>`.
+
+Confirm which outbound a domain takes with the client snippet in
+[`RUNBOOK_dpi_failover.md`](RUNBOOK_dpi_failover.md) §2 + `docker compose logs sing-box | grep <domain>`.
+
 ## Rollback
 
 - Config lives in git-ignored `config*.json` + tracked `vpn/*.j2`. To roll back a template change:

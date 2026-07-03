@@ -65,6 +65,40 @@ The same `sing-box.json.j2` produces different configs based on `config.proxy[<a
 
 So "change a relay's upstream transport" = **edit `protocol` in `config*.json`** (no template change).
 
+## DNS resolution on relays (aligned with routing)
+
+Relays resolve DNS the same way they route traffic, so direct-routed names keep working when the
+tunnel is down and the DPI can't poison lookups (`vpn/sing-box.json.j2`, all relay-gated on
+`forward_group`):
+
+- **tunnel-routed traffic → resolve through the tunnel.** `route.default_domain_resolver` = `quad9-doh`
+  (a DoH server with `detour: "auto"`). Foreign domains resolve unpoisoned at the exit → correct IPs →
+  route to the tunnel. (Plaintext 9.9.9.9 from Russia is DPI-disrupted; without this, foreign domains
+  got mis-resolved and misrouted to `direct-out`, failing with `unexpected EOF`.)
+- **direct-routed traffic → resolve locally.** `direct-out` and the `domain-ru` DNS rule use `local-dns`
+  (`type: local`, the box's system resolver) — RU/direct traffic resolves from the RU perspective and
+  works even if the tunnel is down.
+- **exit server addresses → resolve directly.** Each exit outbound sets `domain_resolver: "bootstrap"`
+  (udp 9.9.9.9). This prevents the "resolve the tunnel through the tunnel" deadlock — exit domains
+  always resolve without the tunnel, so it can always come up.
+
+sing-box has **no on-failure DNS failover**; this destination-split is the robust equivalent.
+`unexpected EOF` for `direct-out` lookups in the first ~70 s after a restart is a benign cold-start
+artifact (remote geoip/geosite rule-sets still downloading).
+
+## Per-site routing (send a domain direct / to a specific exit)
+
+Single source of truth is the inline `domain-ru` rule_set — both the DNS rule
+(`{"rule_set":"domain-ru","server":"local-dns"}`) and the route rule (`domain-ru → direct-out`) use it.
+
+- **RU site on a reachable RU IP** (e.g. `fanfics.me`): add it to `domain-ru` → resolves local + routes
+  direct (fast; avoids the RU→EU→RU detour).
+- **Censored-in-RU + Cloudflare-fronted site** (e.g. `ficbook.net`): direct is impossible (DPI drops the
+  TLS ClientHello by SNI) so it must go through a tunnel; Cloudflare then serves a JS challenge a real
+  browser passes but a datacenter exit IP may get challenge-looped. Pinned to a specific exit via a
+  `route.rules` entry gated on that exit being present (`'am-1.outline.ebac.dev' in fwd_hosts`). A
+  residential/mobile RU-region exit would avoid the challenge; we don't have one.
+
 ## Credentials & keys (all derived, keep consistent per profile)
 
 - **Per-user secret** = `sha256("<user>.<SALT>")`.
@@ -88,13 +122,14 @@ client ──UDP HYSTERIA2_PORT──▶ sing-box hysteria2-in (salamander obfs)
 
 on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless outbound ─▶ EXIT node ─▶ internet
             (geoip-ru / domain-ru / private IPs ─▶ direct-out)
-            (DNS: DoH to Quad9; on relays it is sent through the tunnel — see DPI runbook)
+            (DNS on relays is split like routing: tunnel-routed → DoH-via-tunnel, direct-routed →
+             local resolver, exit addresses → direct 9.9.9.9 — see "DNS resolution on relays")
 ```
 
 ## Gotchas
 
 - **`ssh` is aliased to kitty's ssh-kitten** in this environment → use **`/usr/bin/ssh`** / `/usr/bin/scp` for non-interactive commands.
-- **ebac servers**: root SSH key is only on `ru-1`. For the others connect as **`ubuntu@` + `sudo`**; the `vpn/` dir is root-owned (`drwx------`), so `sudo bash -c 'cd /home/ubuntu/vpn && …'`.
+- **ebac servers**: root SSH key is on `ru-1`; **`am-1` (Yerevan exit) is root-only** — connect `root@am-1` with `-o IdentitiesOnly=yes -i ~/.ssh/id_rsa`, and its dir is `/root/vpn` (inventory line carries the per-host `ansible_user=root` override). For the rest connect as **`ubuntu@` + `sudo`**; the `vpn/` dir is root-owned (`drwx------`), so `sudo bash -c 'cd /home/ubuntu/vpn && …'`.
 - **`ru-2.kvmki.v.dimonb.com` also runs FreeSWITCH**; its VPN dir is `/root/vpn`. Deploy only touches the docker-compose stack there — FreeSWITCH is separate.
 - **Mainline sing-box (`itdoginfo/sing-box:v1.12.12`) has no `tls_fragment`** — that field is rejected.
 - Validate a rendered config with sing-box's own checker (needs the cert mounted):

@@ -82,11 +82,17 @@ the non-working ones. The relay group is `config.proxy[<relay>].features.forward
 }
 ```
 
-**b) `vpn/sing-box.json.j2`** — the DNS-through-tunnel bits (already in the template; keep them).
-On relay nodes only, `quad9-doh` gets `detour: "auto"` and `route.default_domain_resolver` is set to
-`{"server":"bootstrap"}` (resolves the exit domains via direct UDP so the tunnel can come up without
-a resolve cycle). The `forward_group` detection sits at the top of the template so the DNS block can
-use it. No change needed unless you touch DNS.
+**b) `vpn/sing-box.json.j2`** — DNS on relays is **aligned with routing** (already in the template;
+keep it). All relay-gated on `forward_group`:
+- `route.default_domain_resolver` = **`quad9-doh`** (DoH with `detour:"auto"`) → tunnel-routed names
+  resolve **through the tunnel**, unpoisoned. (Was `bootstrap`; plaintext 9.9.9.9 from RU is DPI-
+  disrupted, which mis-resolved foreign domains and misrouted them to `direct-out` → floods of
+  `open connection to <domain>… using outbound/direct[direct-out]: lookup …: unexpected EOF`.)
+- each exit outbound has **`domain_resolver:"bootstrap"`** (udp 9.9.9.9) → exit **server addresses**
+  resolve directly so the tunnel always comes up (no "resolve the tunnel through the tunnel" deadlock).
+- `direct-out` and the `domain-ru` DNS rule use **`local-dns`** (`type:local`) → direct-routed names
+  resolve from the RU perspective, work even if the tunnel is down.
+See AGENTS.md → "DNS resolution on relays". No change needed unless you touch DNS.
 
 ## 4. Validate, deploy to the relay only, verify
 
@@ -98,7 +104,9 @@ make deploy ENV_FILE=$ENVF CONFIG_FILE=$CFG SERVERS_FILE=$SRV TEST_ONLY=<relay>
 
 Expected end state on the relay's rendered `sing-box.json`: outbounds are `hysteria2` to the exits,
 `auto` (and `auto-il`) list only working exits, `quad9-doh.detour == "auto"`,
-`route.default_domain_resolver == {"server":"bootstrap"}`. Logs: **0** urltest/reality/dns EOF.
+`route.default_domain_resolver == {"server":"quad9-doh"}`, each exit outbound has
+`domain_resolver == "bootstrap"`, and `direct-out.domain_resolver == "local-dns"`. Logs (past the
+first ~70 s of startup): **0** urltest/reality/dns EOF and no steady-state `direct-out` lookup EOF.
 
 ## Notes & escalation
 
@@ -108,4 +116,8 @@ Expected end state on the relay's rendered `sing-box.json`: outbounds are `hyste
   (redeploy that host), wrong port for its profile, UDP to that IP also filtered.
 - **If TSPU starts dropping QUIC/UDP as well:** options are rotating the exit's IP, or adding a
   desync layer (zapret / byedpi / GoodbyeDPI-style) on the relay. Neither is wired up here yet.
-- Last applied: 2026-07-02 — ebac `ru-1` → fr-2/de-2/il-1; dimonb `ru-2` → ie-0.
+- **Per-site quirks** (a Russian site that's slow through the tunnel, or a censored site that must
+  bypass the DPI): see AGENTS.md → "Per-site routing". RU-IP sites go in the `domain-ru` rule_set
+  (direct + local resolve); censored + Cloudflare-fronted sites are pinned to an exit.
+- Last applied: 2026-07-03 — ebac `ru-1` → fr-2/de-2/**am-1**/il-1; dimonb `ru-2` → ie-0. DNS
+  aligned with routing on both relays; `fanfics.me`→direct, `ficbook.net`→am-1 (ebac).
