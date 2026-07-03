@@ -20,9 +20,16 @@
         "path": "/dns-query",
         "domain_resolver": "bootstrap"{% if forward_group and config.subs.get(forward_group) %},
         "detour": "auto"{% endif %}
-      }
+      }{% if forward_group and config.subs.get(forward_group) %},
+      {
+        "tag": "local-dns",
+        "type": "local"
+      }{% endif %}
     ],
     "rules": [
+{% if forward_group and config.subs.get(forward_group) %}
+      { "domain_suffix": [".ru"], "server": "local-dns" },
+{% endif %}
       {
         "server": "quad9-doh"
       }
@@ -91,7 +98,7 @@
   ],
   {% if (forward_group and config.subs.get(forward_group)) or (forward_il_group and config.subs.get(forward_il_group)) %}
   "outbounds": [
-    { "type": "direct", "tag": "direct-out" },
+    { "type": "direct", "tag": "direct-out"{% if forward_group and config.subs.get(forward_group) %}, "domain_resolver": "local-dns"{% endif %} },
     {% if forward_group and config.subs.get(forward_group) %}
     {
       "type": "urltest",
@@ -137,6 +144,7 @@
       "tag": "{{ item.host }}",
       "server": "{{ item.host }}",
       "server_port": {{ hysteria2_port | default(47012) }},
+      "domain_resolver": "bootstrap",
       "password": "{{ ('system' + '.' + salt) | hash('sha256') }}",
       "obfs": {
         "type": "salamander",
@@ -155,6 +163,7 @@
       "tag": "{{ item.host }}",
       "server": "{{ item.host }}",
       "server_port": {{ https_port | default(443) }},
+      "domain_resolver": "bootstrap",
       "uuid": "{{ ('system' + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}",
       "flow": "xtls-rprx-vision",
       "packet_encoding": "xudp",
@@ -185,6 +194,7 @@
       "tag": "{{ item.host }}",
       "server": "{{ item.host }}",
       "server_port": {{ hysteria2_port | default(47012) }},
+      "domain_resolver": "bootstrap",
       "password": "{{ ('system' + '.' + salt) | hash('sha256') }}",
       "obfs": {
         "type": "salamander",
@@ -203,6 +213,7 @@
       "tag": "{{ item.host }}",
       "server": "{{ item.host }}",
       "server_port": {{ https_port | default(443) }},
+      "domain_resolver": "bootstrap",
       "uuid": "{{ ('system' + '.' + salt) | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}",
       "flow": "xtls-rprx-vision",
       "network": "tcp",
@@ -226,7 +237,7 @@
     {% endif %}
   ],
   "route": {
-    "default_domain_resolver": { "server": "bootstrap" },
+    "default_domain_resolver": { "server": "quad9-doh" },
     "rules": [
       { "ip_is_private": true, "outbound": "direct-out" },
       { "rule_set": "geosite-google", "outbound": "auto" },
