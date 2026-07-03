@@ -28,7 +28,7 @@
     ],
     "rules": [
 {% if forward_group and config.subs.get(forward_group) %}
-      { "domain_suffix": [".ru"], "server": "local-dns" },
+      { "rule_set": "domain-ru", "server": "local-dns" },
 {% endif %}
       {
         "server": "quad9-doh"
@@ -240,6 +240,9 @@
     "default_domain_resolver": { "server": "quad9-doh" },
     "rules": [
       { "ip_is_private": true, "outbound": "direct-out" },
+      {% if forward_group and config.subs.get(forward_group) %}{% set fwd_hosts = [] %}{% for _n, _it in config.subs[forward_group].items() %}{% set _ = fwd_hosts.append(_it.host) %}{% endfor %}{% if 'am-1.outline.ebac.dev' in fwd_hosts %}
+      { "domain_suffix": ["ficbook.net"], "outbound": "am-1.outline.ebac.dev" },
+      {% endif %}{% endif %}
       { "rule_set": "geosite-google", "outbound": "auto" },
       { "rule_set": "geosite-telegram", "outbound": "auto" },
       { "rule_set": "geosite-facebook", "outbound": "auto" },
@@ -265,7 +268,11 @@
       {
         "tag": "domain-ru",
         "type": "inline",
-        "rules": [ { "domain_suffix": [".ru"] } ]
+        "rules": [
+          { "domain_suffix": [".ru"] },
+          { "domain": ["fanfics.me"] },
+          { "domain_suffix": [".fanfics.me"] }
+        ]
       },
       {
         "tag": "geoip-il",
