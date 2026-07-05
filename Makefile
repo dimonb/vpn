@@ -9,7 +9,10 @@ URL := "https://rohoscsnhb.execute-api.eu-west-1.amazonaws.com/default/vpn"
 # make deploy TEST_ONLY=br-1  # Test on specific instance only
 
 # Profile configuration - alternative file names
-ENV_FILE ?= ".env"
+# NOTE: no quotes — the value feeds `$(wildcard)`/`include` below, which are pure-make
+# directives that do NOT strip shell quotes. Quoting it (".env") makes the wildcard miss the
+# file, silently skips the include, and secrets fall back to the placeholder defaults below.
+ENV_FILE ?= .env
 
 # Load environment variables from .env file
 ifneq (,$(wildcard ./$(ENV_FILE)))
