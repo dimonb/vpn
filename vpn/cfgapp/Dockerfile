@@ -52,6 +52,11 @@ COPY --chown=app:app env.example ./
 # Change ownership of the entire app directory
 RUN chown -R app:app /app
 
+# Mount point for the RULE-SET/NETSET list cache. Created here, and owned by the
+# app user, so the named volume docker-compose attaches inherits that ownership
+# — the app runs unprivileged and could not create it itself.
+RUN mkdir -p /cache/lists && chown -R app:app /cache
+
 # Switch to non-root user
 USER app
 

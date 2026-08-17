@@ -95,6 +95,10 @@ services:
     volumes:
       - ./cfgapp:/app
       - ./config.json:/config.json
+      # Survives --force-recreate, so a deploy does not send every RULE-SET and
+      # NETSET back to raw.githubusercontent.com. Named (not a bind mount) so it
+      # inherits the app user's ownership from the image.
+      - cfgapp-cache:/cache
 {% if relay %}
     networks:
       - default
@@ -125,6 +129,10 @@ services:
     privileged: true
     pid: host
     user: root
+
+volumes:
+  cfgapp-cache:
+    name: vpn-cfgapp-cache
 
 {% if relay %}
 # Dedicated bridge with a pinned subnet so sing-box (host networking) has a

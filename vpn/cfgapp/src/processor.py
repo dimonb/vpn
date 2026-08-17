@@ -3,11 +3,13 @@
 import asyncio
 import logging
 import re
+import time
 from urllib.parse import urlparse
 
 import httpx
 
 from .config import settings
+from .listcache import ListCache
 from .utils import dedupe_lines, netset_expand
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,26 @@ NETSET_RE = re.compile(r"^#NETSET\s+(\S+)", re.IGNORECASE)
 # returned a truncated body on some requests. Be patient, and retry.
 LIST_TIMEOUT = 15.0
 LIST_ATTEMPTS = 3
+
+# Once a list has failed, do not let every subsequent request re-discover that
+# for itself: a full retry cycle costs LIST_ATTEMPTS * LIST_TIMEOUT, and with the
+# cache serving a stale copy anyway the only thing those seconds buy is a slow
+# endpoint during someone else's outage. Recheck at most this often.
+LIST_FAILURE_BACKOFF = 60.0
+
+# Concurrent requests all expand the same handful of lists, so a TTL expiry would
+# otherwise send N identical fetches upstream at once. One request refreshes;
+# the rest wait for it and read what it wrote. Keyed by cache key, per process.
+_refresh_locks: dict[str, asyncio.Lock] = {}
+_failed_until: dict[str, float] = {}
+
+
+def _refresh_lock(key: str) -> asyncio.Lock:
+    """Lock guarding refreshes of one cache key."""
+    lock = _refresh_locks.get(key)
+    if lock is None:
+        lock = _refresh_locks[key] = asyncio.Lock()
+    return lock
 
 
 class ListFetchError(Exception):
@@ -51,9 +73,16 @@ class ListFetchError(Exception):
 class TemplateProcessor:
     """Process template files and expand RULE-SET entries."""
 
-    def __init__(self, http_client: httpx.AsyncClient):
-        """Initialize processor with HTTP client."""
+    def __init__(
+        self, http_client: httpx.AsyncClient, list_cache: ListCache | None = None
+    ):
+        """Initialize processor with HTTP client and its list cache."""
         self.http_client = http_client
+        self.list_cache = list_cache or ListCache(
+            settings.list_cache_dir,
+            settings.list_cache_fresh_seconds,
+            settings.list_cache_max_age_seconds,
+        )
 
     async def _fetch_list(self, url: str, **kwargs) -> httpx.Response:
         """GET a list URL, retrying transient transport/timeout failures.
@@ -80,6 +109,53 @@ class TemplateProcessor:
         except httpx.HTTPStatusError as e:
             raise ListFetchError(url, e) from e
 
+    async def fetch_list_text(
+        self, url: str, cache_key: str | None = None, **kwargs
+    ) -> str:
+        """Return a list body, from the cache when it is young enough.
+
+        Cache-first, network-second, cache-again-on-failure — see listcache.py
+        for why. ``cache_key`` overrides the key when the URL actually fetched
+        differs from the one the template names.
+        """
+        key = cache_key or url
+
+        cached = self.list_cache.read_fresh(key)
+        if cached is not None:
+            logger.debug(f"List cache hit ({cached.age / 3600:.1f}h old): {key}")
+            return cached.text
+
+        # Recently failed and we still have something usable — do not spend
+        # another LIST_ATTEMPTS * LIST_TIMEOUT finding out it is still broken.
+        if time.monotonic() < _failed_until.get(key, 0.0):
+            cached = self.list_cache.read_stale(key)
+            if cached is not None:
+                return cached.text
+
+        async with _refresh_lock(key):
+            # Whoever held the lock may have just refreshed it for us.
+            cached = self.list_cache.read_fresh(key)
+            if cached is not None:
+                return cached.text
+
+            try:
+                response = await self._fetch_list(url, **kwargs)
+                self._raise_for_list_status(key, response)
+            except ListFetchError as e:
+                _failed_until[key] = time.monotonic() + LIST_FAILURE_BACKOFF
+                cached = self.list_cache.read_stale(key)
+                if cached is None:
+                    raise
+                logger.warning(
+                    f"List fetch failed ({e.reason!r}), serving cached copy "
+                    f"{cached.age / 3600:.1f}h old: {key}"
+                )
+                return cached.text
+
+            _failed_until.pop(key, None)
+            self.list_cache.write(key, response.text)
+            return response.text
+
     async def smart_fetch(
         self, url_str: str, incoming_host: str, request_headers: dict
     ) -> str:
@@ -97,15 +173,16 @@ class TemplateProcessor:
             headers = dict(request_headers)
             headers.pop("cookie", None)  # Remove cookies
 
+            # Deliberately uncached: this is our own origin, the response varies
+            # with the caller's headers, and a config edit must not take a day
+            # to show up.
             response = await self._fetch_list(proxy_url, headers=headers)
             self._raise_for_list_status(url_str, response)
             return response.text
         else:
             # Direct fetch for external URLs (including ALT_HOST)
             print(f"Direct fetch for: {url_str}")
-            response = await self._fetch_list(url_str)
-            self._raise_for_list_status(url_str, response)
-            return response.text
+            return await self.fetch_list_text(url_str)
 
     async def expand_netset(self, url_str: str, suffix: str) -> list[str]:
         """Fetch and expand NETSET file.
@@ -114,11 +191,7 @@ class TemplateProcessor:
         caller must fail the request rather than serve the list's ranges away.
         """
         print(f"Fetching NETSET: {url_str}")
-        response = await self._fetch_list(url_str)
-        if not response.is_success:
-            raise ListFetchError(url_str, f"HTTP {response.status_code}")
-
-        text = response.text
+        text = await self.fetch_list_text(url_str)
         expanded = netset_expand(
             text,
             suffix,

@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     xray_verify: str = Field(default="")
     base_url: str = Field(default="")
 
+    # RULE-SET / NETSET list cache (see listcache.py). The directory is a docker
+    # volume, so the cache survives the deploy's --force-recreate; a fresh copy
+    # is only fetched once a day, and a copy up to a month old still beats
+    # failing the request when the upstream is down.
+    list_cache_dir: str = Field(default="/cache/lists")
+    list_cache_fresh_seconds: int = Field(default=24 * 60 * 60)
+    list_cache_max_age_seconds: int = Field(default=30 * 24 * 60 * 60)
+
     # Logging
     log_level: str = Field(default="INFO")
 

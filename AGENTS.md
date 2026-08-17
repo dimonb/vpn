@@ -265,6 +265,59 @@ joins the blocklist, without making the tunnel a prerequisite for deploying.
 Same family of problem as GH Pages / `raw.githubusercontent.com` being partly blocked from RU — see
 [cfgapp's own egress on relays](#cfgapps-own-egress-on-relays-origin-fetches-go-through-the-tunnel).
 
+## RULE-SET / NETSET lists are cached on disk (and served stale on failure)
+
+**2026-08-17, second incident of the day.** `raw.githubusercontent.com` started answering `429 Too
+Many Requests` — globally, not to us specifically (reproduced from the laptop and from ie-0, on an
+unrelated repo; `github.com` itself was fine, `x-served-by: cache-…-DUB`, i.e. Fastly). Every list
+fetch failed, and since the strict contract turns a failed list into a hard error, both RU relays
+served `502` for `/contabo.conf` and Gatus paged.
+
+The contract was right; the architecture around it was not. cfgapp re-fetched **every** list on
+**every** request — 5 URLs (`lord-alfred/ipranges` amazon+apple v4/v6, `HybridNetworks/whatsapp-cidr`)
+× ~183 requests/hour on ru-0 alone ≈ 900 GitHub hits/hour per host, for files that change once a day.
+Both relays exit through the same ie-0 address, so upstream saw ~1800/hour from one IP.
+
+**Fix: `src/listcache.py`, a content-addressed on-disk cache** (sha256 of the URL → `<digest>.body`),
+wired into `TemplateProcessor.fetch_list_text()`:
+
+| state of the cached copy | behaviour |
+|---|---|
+| younger than `list_cache_fresh_seconds` (24 h) | serve it, **no network request at all** |
+| older | re-fetch, store the new body |
+| re-fetch failed, copy < `list_cache_max_age_seconds` (30 d) | **serve the stale copy**, log a warning |
+| nothing usable on disk | raise `ListFetchError` → 502/504, as before |
+
+- **The file's mtime is the timestamp.** No sidecar metadata to drift out of sync, and `ls -l` in the
+  volume tells you the whole story.
+- **Lives in a named volume** `vpn-cfgapp-cache` → `/cache`, so it survives the deploy's
+  `--force-recreate`. It must be a *named* volume, not a bind mount: cfgapp runs as the unprivileged
+  `app` user (uid 1000) and could not write a host directory docker created as root — the volume
+  inherits ownership from `/cache` in the image instead (`Dockerfile`: `mkdir -p /cache/lists &&
+  chown -R app:app /cache`).
+- **Every filesystem error is swallowed and logged.** A broken cache degrades to "fetch every time",
+  never to a failed request. Writes go through a temp file + `os.replace`, so a crash cannot leave a
+  half-written list that then looks valid for a month.
+- **Single-flight**: a module-level lock per cache key, so a TTL expiry sends *one* request upstream
+  instead of one per concurrent client. Waiters re-read the cache after the lock and get what the
+  leader wrote.
+- **Failure backoff** (`LIST_FAILURE_BACKOFF`, 60 s): after a failure, requests holding a stale copy
+  skip the network entirely for a minute. Without it every request would pay
+  `LIST_ATTEMPTS × LIST_TIMEOUT` = 45 s per broken list before falling back — serialized behind the
+  single-flight lock, which would be far worse than the outage itself. Gatus's timeout is 48 s.
+- The same-host branch of `smart_fetch` (RULE-SETs proxied via `API_HOST`, our own origin) is
+  **deliberately uncached** — the response varies with the caller's headers and a config edit must
+  not take a day to appear. `API_HOST` is unset in production, so that branch is dormant anyway.
+- Tunables, all env-overridable: `LIST_CACHE_DIR`, `LIST_CACHE_FRESH_SECONDS`,
+  `LIST_CACHE_MAX_AGE_SECONDS`. Inspect with
+  `docker run --rm -v vpn-cfgapp-cache:/c alpine ls -l /c/lists`.
+- Tests isolate the cache per-test via `tests/conftest.py` (autouse, points `list_cache_dir` at
+  `tmp_path`). **Without it a body cached by one test satisfies the next test's fetch**, the mocked
+  client goes uncalled, and assertions fail for no visible reason — remember this when adding tests.
+
+The 502-instead-of-truncation contract itself is unchanged; see
+[cfgapp's own egress on relays](#cfgapps-own-egress-on-relays-origin-fetches-go-through-the-tunnel).
+
 ## Per-site routing (send a domain direct / to a specific exit)
 
 Single source of truth is the inline `domain-ru` rule_set — both the DNS rule

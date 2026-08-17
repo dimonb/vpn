@@ -156,6 +156,11 @@ IP-CIDR,192.168.1.0/24,DIRECT
         mock_response = AsyncMock()
         mock_response.is_success = False
         mock_response.status_code = 404
+        mock_response.raise_for_status = Mock(
+            side_effect=httpx.HTTPStatusError(
+                "404", request=Mock(), response=Mock(status_code=404)
+            )
+        )
         http_client.get.return_value = mock_response
 
         with pytest.raises(ListFetchError) as exc_info:
@@ -216,6 +221,11 @@ IP-CIDR,192.168.1.0/24,DIRECT
         netset_response = AsyncMock()
         netset_response.is_success = False
         netset_response.status_code = 500
+        netset_response.raise_for_status = Mock(
+            side_effect=httpx.HTTPStatusError(
+                "500", request=Mock(), response=Mock(status_code=500)
+            )
+        )
 
         http_client.get.side_effect = [rule_response, netset_response]
 
