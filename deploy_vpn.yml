@@ -102,11 +102,16 @@
           }
 
     # --- docker daemon egress on relays ------------------------------------------
-    # ghcr.io is blocked from Russian networks, so the `docker compose up --pull always`
-    # below cannot reach it from a RU relay. Relays send the docker daemon's registry
-    # traffic through their own sing-box tunnel — the very same password-protected
-    # `cfgapp-in` mixed inbound that cfgapp uses. Gated exactly like the inbound is in
-    # vpn/docker-compose.yml.j2, so leaf/exit hosts keep direct egress and get no proxy.
+    # Every image the compose file pulls now lives on docker.io, which answers from RU
+    # (that is why xray-core is mirrored to dimonb/xray-core — see vpn/docker-compose.yml.j2),
+    # so the tunnel is an optimisation here, not a prerequisite. When a relay's tunnel is
+    # already up we still send the docker daemon's registry traffic through it — the very
+    # same password-protected `cfgapp-in` mixed inbound that cfgapp uses — because that
+    # path is the one that survives if docker.io ever gets blocked too. When it is down the
+    # drop-in is actively removed, so pulls fall back to direct egress instead of dying on
+    # a dead proxy. That matters on a brand-new relay: the `vpn-tunnel` bridge does not
+    # exist until the first `docker compose up` further down creates it, so its first
+    # deploy necessarily runs without a tunnel.
     # Must run BEFORE `docker compose build` / `up --pull always`.
     - name: Load the deploy config (relay-vs-leaf data)
       ansible.builtin.set_fact:
@@ -122,6 +127,31 @@
       ansible.builtin.set_fact:
         vpn_is_relay: "{{ (vpn_forward_group | trim | length > 0) and (vpn_forward_group | trim in (vpn_deploy_config.subs | default({}, true))) }}"
 
+    # A relay whose tunnel is not listening must not get the drop-in — pointing dockerd at
+    # a dead proxy would break pulls that work perfectly well direct. `ignore_errors` (not
+    # `failed_when: false`) on purpose: the latter would force `failed=False` and leave
+    # nothing to branch on.
+    - name: Probe the relay tunnel proxy
+      ansible.builtin.wait_for:
+        host: "{{ tunnel_proxy_gateway | default('172.29.77.1') }}"
+        port: "{{ tunnel_proxy_port | default(1080) }}"
+        timeout: 5
+      when: vpn_is_relay | bool
+      register: vpn_tunnel_probe
+      ignore_errors: true
+
+    - name: Decide whether the docker daemon should pull through the tunnel
+      ansible.builtin.set_fact:
+        vpn_docker_via_tunnel: "{{ (vpn_is_relay | bool) and (vpn_tunnel_probe is not skipped) and (vpn_tunnel_probe is not failed) }}"
+
+    - name: Note that a relay is deploying without its tunnel
+      ansible.builtin.debug:
+        msg: >-
+          Tunnel proxy {{ tunnel_proxy_gateway | default('172.29.77.1') }}:{{ tunnel_proxy_port | default(1080) }}
+          is not listening — docker will pull directly. Expected on a host whose vpn-tunnel
+          bridge does not exist yet; otherwise check sing-box.
+      when: (vpn_is_relay | bool) and not (vpn_docker_via_tunnel | bool)
+
     - name: Ensure the docker service drop-in directory exists
       ansible.builtin.file:
         path: /etc/systemd/system/docker.service.d
@@ -129,7 +159,7 @@
         owner: root
         group: root
         mode: "0755"
-      when: vpn_is_relay | bool
+      when: vpn_docker_via_tunnel | bool
 
     - name: Route the docker daemon's registry pulls through the relay tunnel
       ansible.builtin.template:
@@ -138,14 +168,17 @@
         owner: root
         group: root
         mode: "0600"
-      when: vpn_is_relay | bool
+      when: vpn_docker_via_tunnel | bool
       register: vpn_docker_proxy_dropin
 
-    - name: Remove the docker daemon proxy on non-relay hosts
+    # Covers leaves, and relays whose tunnel is down — including one that had the drop-in
+    # from an earlier deploy, which is exactly the case that must not be left pointing at a
+    # dead proxy.
+    - name: Remove the docker daemon proxy where the tunnel is not usable
       ansible.builtin.file:
         path: /etc/systemd/system/docker.service.d/http-proxy.conf
         state: absent
-      when: not (vpn_is_relay | bool)
+      when: not (vpn_docker_via_tunnel | bool)
       register: vpn_docker_proxy_dropin_removed
 
     # dockerd reads its proxy from the environment at start, so the drop-in only takes
@@ -158,22 +191,41 @@
         daemon_reload: true
       when: (vpn_docker_proxy_dropin is changed) or (vpn_docker_proxy_dropin_removed is changed)
 
+    # The restart bounced sing-box too, so the tunnel it was just pointed at is briefly
+    # gone. Give it time to re-bind — and if it never does, back the drop-in out rather
+    # than sending the pull into a dead proxy.
     - name: Wait for the relay tunnel proxy to accept connections after the docker restart
       ansible.builtin.wait_for:
         host: "{{ tunnel_proxy_gateway | default('172.29.77.1') }}"
         port: "{{ tunnel_proxy_port | default(1080) }}"
         timeout: 180
-      when: (vpn_is_relay | bool) and (vpn_docker_proxy_dropin is changed)
+      when: (vpn_docker_via_tunnel | bool) and (vpn_docker_proxy_dropin is changed)
+      register: vpn_tunnel_recovered
+      ignore_errors: true
+
+    - name: Drop the docker proxy again if the tunnel did not come back
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d/http-proxy.conf
+        state: absent
+      when: vpn_tunnel_recovered is failed
+      register: vpn_docker_proxy_dropin_reverted
+
+    - name: Restart docker without the proxy after reverting
+      ansible.builtin.systemd_service:
+        name: docker
+        state: restarted
+        daemon_reload: true
+      when: vpn_docker_proxy_dropin_reverted is changed
 
     - name: Build docker-compose apps
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"
         cmd: docker compose build
 
-    # On relays `--pull always` goes through the tunnel (see the drop-in tasks above), so a
-    # single transient hiccup at the exit (e.g. `remote error: lookup auth.docker.io:
-    # unexpected EOF`) is enough to abort the whole pull. Retry a couple of times instead of
-    # failing the deploy on the last task.
+    # When the drop-in is in place `--pull always` goes through the tunnel, so a single
+    # transient hiccup at the exit (e.g. `remote error: lookup auth.docker.io: unexpected
+    # EOF`) is enough to abort the whole pull. Retry a couple of times instead of failing
+    # the deploy on the last task.
     - name: Run Docker Compose
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"

@@ -7,7 +7,11 @@
 {% set relay = (forward_group and config.subs.get(forward_group)) %}
 services:
   xray:
-    image: ghcr.io/xtls/xray-core:26.2.6
+    # Mirror of ghcr.io/xtls/xray-core:26.2.6 (byte-identical index, same digest).
+    # ghcr.io is blocked from Russian networks, docker.io is not — pulling upstream
+    # directly makes every RU deploy depend on the sing-box tunnel already being up,
+    # which a fresh host does not have. Re-mirror after a version bump: `make mirror-images`.
+    image: dimonb/xray-core:26.2.6
     restart: unless-stopped
     volumes:
       - ./xray.json:/etc/xray/config.json:ro

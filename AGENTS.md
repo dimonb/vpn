@@ -51,7 +51,9 @@ make deploy                     [TEST_ONLY=<host>]     # personal: bare defaults
 1. `check-env` validates required vars are set in the ENV_FILE.
 2. `ansible-playbook -i <SERVERS_FILE> deploy_vpn.yml -e "<vars from ENV_FILE>"`.
 3. Per host: ensure `vpn/` dir + self-signed cert, rsync `cfgapp/` + `static/`, **render every
-   `vpn/*.j2` template**, then `docker compose build` + `up --pull always --force-recreate -d`.
+   `vpn/*.j2` template**, decide the docker daemon's egress (see
+   [ghcr.io is unreachable from RU hosts](#ghcrio-is-unreachable-from-ru-hosts-images-are-mirrored-to-docker-hub)),
+   then `docker compose build` + `up --pull always --force-recreate -d`.
 - `TEST_ONLY=<host>` → `--limit <host>` (deploy to a single host). **Without it, the whole `vpn`
   inventory group is recreated.**
 - **Consequence:** any hand-edit made directly on a server is **overwritten on the next deploy**.
@@ -197,9 +199,9 @@ fresh connection, so a direct-route retry also re-resolves and lands on a differ
 Don't raise it back to a single 30 s attempt: a stalled origin then holds the request past the
 monitoring timeout and the whole host looks down.
 
-## ghcr.io is unreachable from RU hosts (docker pulls go through the tunnel)
+## ghcr.io is unreachable from RU hosts (images are mirrored to Docker Hub)
 
-**ghcr.io is blocked from Russian networks.** Only the `xray` image comes from there (the rest are
+**ghcr.io is blocked from Russian networks.** Only the `xray` image came from there (the rest are
 Docker Hub, which is reachable), and going direct the deploy's last task —
 `docker compose up --pull always …` — cannot succeed on a RU host:
 
@@ -210,40 +212,55 @@ Error response from daemon: Head "https://ghcr.io/v2/xtls/xray-core/manifests/26
 (also seen as `… TLS handshake timeout`.) 2026-08-17: it hit `ru-2.kvmki.v.dimonb.com` on every
 deploy; `ru-0.yandex.v.dimonb.com` only got through because it had the manifest cached.
 
-**Fix (2026-08-17): on relays the docker daemon's registry traffic goes through the relay's own
-tunnel**, reusing the inbound cfgapp already uses. `--pull always` stays. `deploy_vpn.yml` renders
-`vpn/docker-http-proxy.conf.j2` → `/etc/systemd/system/docker.service.d/http-proxy.conf` (mode
-`0600`, root — it carries the proxy password), setting `HTTP_PROXY`/`HTTPS_PROXY` to
+**Fix: the image is mirrored, so nothing the deploy pulls lives on a blocked registry.**
+`vpn/docker-compose.yml.j2` uses `dimonb/xray-core:26.2.6` — a copy of `ghcr.io/xtls/xray-core`
+with the *same digest* (`sha256:c6daec52…`, the full 9-platform index). `make mirror-images` re-runs
+the copy from the `MIRROR_IMAGES` list in the Makefile; it uses `crane` (registry→registry, no
+docker daemon) and prints both digests so you can see they match. **After bumping the xray version
+in `docker-compose.yml.j2`, bump it in `MIRROR_IMAGES` and run `make mirror-images` — otherwise RU
+hosts pull a tag that does not exist yet.**
+
+**Belt and braces: when a relay's tunnel is up, dockerd pulls through it anyway.** `deploy_vpn.yml`
+renders `vpn/docker-http-proxy.conf.j2` → `/etc/systemd/system/docker.service.d/http-proxy.conf`
+(mode `0600`, root — it carries the proxy password), setting `HTTP_PROXY`/`HTTPS_PROXY` to
 `http://cfgapp:<sha256("cfgapp-proxy."+SALT)>@172.29.77.1:1080`, i.e. the `mixed` inbound
 `cfgapp-in` that a `route.rules` entry pins to `auto` (hysteria2 → EU exit). `NO_PROXY` keeps
 loopback, this host's own names/IP and all RFC1918 + link-local direct (docker bridges incl.
-`vpn-tunnel`, the LAN, cloud metadata `169.254.169.254`).
+`vpn-tunnel`, the LAN, cloud metadata `169.254.169.254`). That keeps a path open if Docker Hub ever
+joins the blocklist, without making the tunnel a prerequisite for deploying.
 
 - **Relay-gated exactly like the templates** (`proxy.<ansible_host>.features.forward-nonru` present
   *and* its subs group exists — the same `lookup('file', config_file) | from_json` dance as
   `docker-compose.yml.j2`). Leaf/exit hosts have working direct egress: the drop-in is **removed**
   there, never installed.
+- **And port-gated.** The play probes `172.29.77.1:1080` (`wait_for`, 5 s, `ignore_errors`) and only
+  installs the drop-in if something answers; otherwise it *removes* it, so pulls fall back to direct
+  egress instead of dying on a dead proxy. This is what makes a **first** deploy to a new RU relay
+  possible at all: the `vpn-tunnel` bridge does not exist until the first `docker compose up`
+  creates it, so the probe on a fresh host is guaranteed to fail. Use `ignore_errors`, **not**
+  `failed_when: false` — the latter forces `failed=False` and leaves nothing to branch on.
 - dockerd reads its proxy from the environment **at start**, so the play does `daemon-reload` +
   `systemctl restart docker` — **only when the drop-in actually changed** (registered result, not a
   blind restart). That restart bounces *every* container on the box, VPN and non-VPN alike (on ru-0
   that's `freeswitch`, `shadowbox`, `watchtower` too), which is why it must stay change-gated. The
-  play then `wait_for`s `172.29.77.1:1080` before continuing, so the proxy is listening again after
-  the bounce.
+  play then `wait_for`s `172.29.77.1:1080` (180 s) so the tunnel it just pointed dockerd at is back
+  after the bounce — and **if it does not come back, the drop-in is removed and docker restarted
+  again**, i.e. the deploy backs itself out to direct pulls rather than failing.
 - **Ordering matters and is deliberate**: the drop-in tasks sit *after* the template render loop and
   *before* `docker compose build` / `up --pull always`, so the proxy is in effect for the pull.
-- Pulls now cross a DPI-ridden tunnel, and compose aborts the *whole* pull on the first error — e.g.
-  `remote error: … lookup auth.docker.io: unexpected EOF`, the exit's DNS hiccuping (seen once on
-  ru-2, right after the docker restart; the very same pull succeeded on retry). So `Run Docker
-  Compose` now has `until rc == 0` / `retries: 2` / `delay: 20`.
-- Verify: `systemctl show docker --property=Environment` shows the proxy, and
-  `docker logs vpn-sing-box-1 | grep ghcr.io` shows
+- When the pull does cross the tunnel it crosses a DPI-ridden path, and compose aborts the *whole*
+  pull on the first error — e.g. `remote error: … lookup auth.docker.io: unexpected EOF`, the exit's
+  DNS hiccuping (seen once on ru-2, right after the docker restart; the very same pull succeeded on
+  retry). So `Run Docker Compose` has `until rc == 0` / `retries: 2` / `delay: 20`.
+- Verify: `systemctl show docker --property=Environment` shows the proxy (or doesn't, when the
+  tunnel was down), and `docker logs vpn-sing-box-1 | grep -E 'registry|docker\.io'` shows
   `inbound/mixed[cfgapp-in] … outbound/hysteria2[<exit>]` — i.e. the pull left via the tunnel.
 
 **Consequences worth remembering:**
-- A pull on a RU host now **depends on the tunnel being up**. If `auto` is dead, pulls fail again
-  (and `docker compose build` can't fetch base images either) — fix the tunnel first.
-- Still **never run `docker system prune` / `docker image prune -a` on a RU host.** An evicted image
-  is only re-pullable while the tunnel works, and the stack needs those images to start at all.
+- **Never run `docker system prune` / `docker image prune -a` on a RU host.** Less lethal now that
+  the images sit on Docker Hub, but the stack needs them to start at all and RU egress is fragile.
+- A new upstream image added to the compose file must be checked against RU reachability; if it
+  isn't on Docker Hub, mirror it (add it to `MIRROR_IMAGES`) rather than relying on the tunnel.
 
 Same family of problem as GH Pages / `raw.githubusercontent.com` being partly blocked from RU — see
 [cfgapp's own egress on relays](#cfgapps-own-egress-on-relays-origin-fetches-go-through-the-tunnel).
@@ -297,7 +314,8 @@ on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless out
 - Validate a rendered config with sing-box's own checker (needs the cert mounted):
   `docker run --rm --entrypoint sing-box -v /path/sing-box.json:/c.json -v /path/cert:/etc/xray/certs itdoginfo/sing-box:v1.12.12 check -c /c.json`
 - The `error reading bcrypt version` traceback during `make deploy` (passlib/bcrypt on macOS) is **non-fatal** — the caddy template still renders. A *fatal* `password cannot be longer than 72 bytes` from the same area means bcrypt ≥ 4.1 — see [The deploy toolchain lives on the operator's laptop](#the-deploy-toolchain-lives-on-the-operators-laptop).
-- **Never `docker system prune` / `docker image prune -a` on a RU host** — ghcr.io is blocked from RU, so an evicted image is only re-pullable while the relay tunnel is up: [ghcr.io is unreachable from RU hosts](#ghcrio-is-unreachable-from-ru-hosts-docker-pulls-go-through-the-tunnel).
+- **Never `docker system prune` / `docker image prune -a` on a RU host** — RU egress to registries is fragile and the stack cannot start without its images: [ghcr.io is unreachable from RU hosts](#ghcrio-is-unreachable-from-ru-hosts-images-are-mirrored-to-docker-hub).
+- **Bumping the xray version means two edits**: the tag in `vpn/docker-compose.yml.j2` *and* `MIRROR_IMAGES` in the Makefile, then `make mirror-images` — RU hosts pull the mirror, not ghcr.io.
 
 ## Common tasks → runbooks
 

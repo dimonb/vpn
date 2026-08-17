@@ -1,16 +1,22 @@
 {#
   Rendered by deploy_vpn.yml onto RELAY hosts only (proxy.<host>.features.forward-nonru
-  in config*.json). Leaf/exit nodes have working direct egress and never get this file.
+  in config*.json), and only when the tunnel is actually listening — the playbook probes
+  the port first and *removes* this file otherwise. Leaf/exit nodes have working direct
+  egress and never get it.
 
-  Why: ghcr.io is blocked from Russian networks, so the deploy's final
-  `docker compose up --pull always` cannot fetch ghcr.io/xtls/xray-core. A relay already
-  runs a password-protected `mixed` inbound (sing-box tag `cfgapp-in`) on the gateway of
-  the pinned `vpn-tunnel` bridge, and a route rule pins that inbound to the `auto`
+  Why: registries can be blocked from Russian networks — ghcr.io is, which is why
+  xray-core is mirrored to docker.io/dimonb (see vpn/docker-compose.yml.j2). Since every
+  image now comes from docker.io this file is defence in depth rather than a hard
+  requirement, and must never be the reason a pull fails. A relay already runs a
+  password-protected `mixed` inbound (sing-box tag `cfgapp-in`) on the gateway of the
+  pinned `vpn-tunnel` bridge, and a route rule pins that inbound to the `auto`
   (hysteria2 -> EU exit) outbound. Point the docker daemon's registry traffic at it —
   same inbound, same credentials as cfgapp uses.
 
   The gateway is an address on the host itself, restored by dockerd before it starts
-  containers, so it exists whenever dockerd is up.
+  containers, so it exists whenever dockerd is up — but only after the `vpn-tunnel`
+  bridge has been created by a `docker compose up`, which is why a brand-new relay's
+  first deploy runs without this file.
 #}
 {% set no_proxy = [
      'localhost', '127.0.0.1', '::1',
@@ -23,7 +29,7 @@
    ] | reject('equalto', '') | unique | join(',') %}
 # Managed by deploy_vpn.yml — regenerated on every deploy; edits on the host are lost.
 # Registry pulls go through this relay's own sing-box tunnel (inbound `cfgapp-in`
-# -> outbound `auto`), because ghcr.io is unreachable from RU networks.
+# -> outbound `auto`), so a registry blocked from RU networks stays reachable.
 [Service]
 Environment="HTTP_PROXY=http://cfgapp:{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}@{{ tunnel_proxy_gateway | default('172.29.77.1') }}:{{ tunnel_proxy_port | default(1080) }}"
 Environment="HTTPS_PROXY=http://cfgapp:{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}@{{ tunnel_proxy_gateway | default('172.29.77.1') }}:{{ tunnel_proxy_port | default(1080) }}"
