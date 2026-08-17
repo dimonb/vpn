@@ -101,13 +101,85 @@
             mode: "0644",
           }
 
+    # --- docker daemon egress on relays ------------------------------------------
+    # ghcr.io is blocked from Russian networks, so the `docker compose up --pull always`
+    # below cannot reach it from a RU relay. Relays send the docker daemon's registry
+    # traffic through their own sing-box tunnel — the very same password-protected
+    # `cfgapp-in` mixed inbound that cfgapp uses. Gated exactly like the inbound is in
+    # vpn/docker-compose.yml.j2, so leaf/exit hosts keep direct egress and get no proxy.
+    # Must run BEFORE `docker compose build` / `up --pull always`.
+    - name: Load the deploy config (relay-vs-leaf data)
+      ansible.builtin.set_fact:
+        vpn_deploy_config: "{{ lookup('file', config_file | default('config.json')) | from_json }}"
+
+    - name: Derive this host's forward group (same rule as the templates)
+      ansible.builtin.set_fact:
+        vpn_forward_group: >-
+          {{ (((vpn_deploy_config.proxy | default({}, true)).get(ansible_host) | default({}, true)).get('features')
+              | default({}, true)).get('forward-nonru') | default('', true) }}
+
+    - name: Decide whether this host is a relay
+      ansible.builtin.set_fact:
+        vpn_is_relay: "{{ (vpn_forward_group | trim | length > 0) and (vpn_forward_group | trim in (vpn_deploy_config.subs | default({}, true))) }}"
+
+    - name: Ensure the docker service drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: vpn_is_relay | bool
+
+    - name: Route the docker daemon's registry pulls through the relay tunnel
+      ansible.builtin.template:
+        src: ./vpn/docker-http-proxy.conf.j2
+        dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+        owner: root
+        group: root
+        mode: "0600"
+      when: vpn_is_relay | bool
+      register: vpn_docker_proxy_dropin
+
+    - name: Remove the docker daemon proxy on non-relay hosts
+      ansible.builtin.file:
+        path: /etc/systemd/system/docker.service.d/http-proxy.conf
+        state: absent
+      when: not (vpn_is_relay | bool)
+      register: vpn_docker_proxy_dropin_removed
+
+    # dockerd reads its proxy from the environment at start, so the drop-in only takes
+    # effect after daemon-reload + restart. Restarting docker bounces every container on
+    # the box, so do it only when the drop-in actually changed.
+    - name: Reload systemd and restart docker when its proxy config changed
+      ansible.builtin.systemd_service:
+        name: docker
+        state: restarted
+        daemon_reload: true
+      when: (vpn_docker_proxy_dropin is changed) or (vpn_docker_proxy_dropin_removed is changed)
+
+    - name: Wait for the relay tunnel proxy to accept connections after the docker restart
+      ansible.builtin.wait_for:
+        host: "{{ tunnel_proxy_gateway | default('172.29.77.1') }}"
+        port: "{{ tunnel_proxy_port | default(1080) }}"
+        timeout: 180
+      when: (vpn_is_relay | bool) and (vpn_docker_proxy_dropin is changed)
+
     - name: Build docker-compose apps
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"
         cmd: docker compose build
 
+    # On relays `--pull always` goes through the tunnel (see the drop-in tasks above), so a
+    # single transient hiccup at the exit (e.g. `remote error: lookup auth.docker.io:
+    # unexpected EOF`) is enough to abort the whole pull. Retry a couple of times instead of
+    # failing the deploy on the last task.
     - name: Run Docker Compose
       ansible.builtin.shell:
         chdir: "{{ config_directory }}"
         cmd: docker compose up --pull always --remove-orphans --force-recreate -d
+      register: vpn_compose_up
+      until: vpn_compose_up.rc == 0
+      retries: 2
+      delay: 20
 #docker compose down &&

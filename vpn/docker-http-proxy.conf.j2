@@ -1,0 +1,32 @@
+{#
+  Rendered by deploy_vpn.yml onto RELAY hosts only (proxy.<host>.features.forward-nonru
+  in config*.json). Leaf/exit nodes have working direct egress and never get this file.
+
+  Why: ghcr.io is blocked from Russian networks, so the deploy's final
+  `docker compose up --pull always` cannot fetch ghcr.io/xtls/xray-core. A relay already
+  runs a password-protected `mixed` inbound (sing-box tag `cfgapp-in`) on the gateway of
+  the pinned `vpn-tunnel` bridge, and a route rule pins that inbound to the `auto`
+  (hysteria2 -> EU exit) outbound. Point the docker daemon's registry traffic at it —
+  same inbound, same credentials as cfgapp uses.
+
+  The gateway is an address on the host itself, restored by dockerd before it starts
+  containers, so it exists whenever dockerd is up.
+#}
+{% set no_proxy = [
+     'localhost', '127.0.0.1', '::1',
+     ansible_facts.hostname | default('', true),
+     ansible_facts.fqdn | default('', true),
+     ansible_host | default('', true),
+     (ansible_facts.default_ipv4.address if ansible_facts.default_ipv4 is mapping else ''),
+     '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '169.254.0.0/16', 'fd00::/8',
+     '.local', '.internal'
+   ] | reject('equalto', '') | unique | join(',') %}
+# Managed by deploy_vpn.yml — regenerated on every deploy; edits on the host are lost.
+# Registry pulls go through this relay's own sing-box tunnel (inbound `cfgapp-in`
+# -> outbound `auto`), because ghcr.io is unreachable from RU networks.
+[Service]
+Environment="HTTP_PROXY=http://cfgapp:{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}@{{ tunnel_proxy_gateway | default('172.29.77.1') }}:{{ tunnel_proxy_port | default(1080) }}"
+Environment="HTTPS_PROXY=http://cfgapp:{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}@{{ tunnel_proxy_gateway | default('172.29.77.1') }}:{{ tunnel_proxy_port | default(1080) }}"
+# Never proxy: loopback, this host's own names/address, RFC1918 + link-local
+# (cloud metadata at 169.254.169.254, the docker bridges incl. vpn-tunnel itself).
+Environment="NO_PROXY={{ no_proxy }}"
