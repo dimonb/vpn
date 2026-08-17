@@ -16,6 +16,7 @@ from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
 from .happ_processor import HappProcessor
+from .listcache import ListCache
 from .processor import LIST_TIMEOUT, ListFetchError, TemplateProcessor
 from .proxy_config import ProxyConfig
 
@@ -51,6 +52,26 @@ async def lifespan(app: FastAPI):
         )
     else:
         logger.info("Network Compaction: DISABLED")
+
+    # A cache that silently never stores anything is indistinguishable from one
+    # that works, right up until an upstream outage 502s instead of being
+    # absorbed. Say so once, loudly, at startup.
+    if ListCache(
+        settings.list_cache_dir,
+        settings.list_cache_fresh_seconds,
+        settings.list_cache_max_age_seconds,
+    ).check_writable():
+        logger.info(
+            f"List cache: {settings.list_cache_dir} "
+            f"(fresh {settings.list_cache_fresh_seconds}s, "
+            f"expires {settings.list_cache_max_age_seconds}s)"
+        )
+    else:
+        logger.error(
+            "List cache is NOT writable — every request will refetch every list "
+            "and an upstream outage will fail requests instead of serving the "
+            "last good copy. Check the /cache volume."
+        )
 
     # Initialize proxy config if path is provided
     if settings.proxy_config:

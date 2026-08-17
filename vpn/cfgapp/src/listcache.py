@@ -29,6 +29,17 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# A copy stamped in the future is a clock that stepped backwards (bad boot clock,
+# hypervisor migration, NTP correction), not a young copy. Clamping its age to
+# zero would make it fresh forever *and* unprunable, freezing the list until the
+# wall clock caught up — so distrust it instead, past this much tolerance.
+CLOCK_SKEW_TOLERANCE = 60.0
+
+# A temp file only survives a SIGKILL between mkstemp and os.replace. Rare, but
+# nothing else would ever remove it, so sweep the ones that cannot be in flight.
+TEMP_FILE_PREFIX = ".tmp-"
+TEMP_FILE_MAX_AGE = 60 * 60
+
 
 @dataclass(frozen=True)
 class CachedList:
@@ -57,9 +68,16 @@ class ListCache:
         """Return the cached body when a copy no older than ``max_age`` exists."""
         path = self.path_for(key)
         try:
-            age = max(0.0, time.time() - path.stat().st_mtime)
+            age = time.time() - path.stat().st_mtime
         except OSError:
             return None
+        if age < -CLOCK_SKEW_TOLERANCE:
+            logger.warning(
+                f"List cache entry is {-age / 3600:.1f}h in the future "
+                f"(clock stepped back?), refetching: {key}"
+            )
+            return None
+        age = max(0.0, age)
         if age > max_age:
             return None
         try:
@@ -81,10 +99,15 @@ class ListCache:
         path = self.path_for(key)
         try:
             self.directory.mkdir(parents=True, exist_ok=True)
-            fd, tmp_name = tempfile.mkstemp(dir=self.directory, prefix=".tmp-")
+            fd, tmp_name = tempfile.mkstemp(dir=self.directory, prefix=TEMP_FILE_PREFIX)
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as handle:
                     handle.write(text)
+                    # Without this a power loss can leave the rename durable and
+                    # the bytes not, i.e. a truncated list that looks valid for
+                    # a month. Writes happen a handful of times a day; pay it.
+                    handle.flush()
+                    os.fsync(handle.fileno())
                 os.replace(tmp_name, path)
             except BaseException:
                 # Never leave the partial file behind for prune() to age out.
@@ -98,8 +121,25 @@ class ListCache:
             return
         self.prune()
 
+    def check_writable(self) -> bool:
+        """Probe the directory so a broken volume is visible at startup.
+
+        Every other failure here is swallowed by design, which means a cache
+        that never stores anything looks exactly like one that works — until an
+        upstream outage turns into 502s that the cache was supposed to absorb.
+        """
+        probe = self.directory / f"{TEMP_FILE_PREFIX}probe"
+        try:
+            self.directory.mkdir(parents=True, exist_ok=True)
+            probe.write_text("", encoding="utf-8")
+            probe.unlink()
+        except OSError as e:
+            logger.error(f"List cache directory {self.directory} is unusable: {e!r}")
+            return False
+        return True
+
     def prune(self) -> None:
-        """Delete bodies past the expiry window.
+        """Delete bodies past the expiry window, and any leaked temp file.
 
         A URL dropped from a template is never asked for again, so nothing else
         would ever clean it up.
@@ -110,10 +150,16 @@ class ListCache:
             return
         now = time.time()
         for entry in entries:
-            if entry.suffix != ".body":
+            if entry.name.startswith(TEMP_FILE_PREFIX):
+                max_age = TEMP_FILE_MAX_AGE
+            elif entry.suffix == ".body":
+                max_age = self.max_age_seconds
+            else:
                 continue
             try:
-                if now - entry.stat().st_mtime > self.max_age_seconds:
+                # abs(): a future mtime is a broken clock, not a young file, and
+                # must not make an entry immortal.
+                if abs(now - entry.stat().st_mtime) > max_age:
                     entry.unlink()
                     logger.info(f"List cache expired, removed {entry.name}")
             except OSError:

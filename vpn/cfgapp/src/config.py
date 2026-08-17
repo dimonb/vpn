@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     list_cache_fresh_seconds: int = Field(default=24 * 60 * 60)
     list_cache_max_age_seconds: int = Field(default=30 * 24 * 60 * 60)
 
+    # Lists we publish ourselves are edited by hand (the per-site routing
+    # workflow) and must reach clients in minutes, not a day. They still get the
+    # full max_age fallback — only the "do not even ask" window is short.
+    # config_host / api_host are added to this set automatically.
+    list_cache_own_hosts: str = Field(default="s.dimonb.com")
+    list_cache_own_fresh_seconds: int = Field(default=60)
+
     # Logging
     log_level: str = Field(default="INFO")
 

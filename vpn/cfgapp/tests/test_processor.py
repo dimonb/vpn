@@ -14,6 +14,22 @@ from src.processor import (
 )
 
 
+def ok_response(text: str) -> AsyncMock:
+    """A mock that answers like a real httpx 200.
+
+    Faithful on purpose: a bare ``AsyncMock`` turns ``raise_for_status`` into an
+    *async* method that never raises when called synchronously, and leaves
+    ``status_code`` a truthy Mock — so the checks that fail a truncated list
+    would silently not run.
+    """
+    response = AsyncMock()
+    response.status_code = 200
+    response.is_success = True
+    response.text = text
+    response.raise_for_status = Mock()
+    return response
+
+
 class TestTemplateProcessor:
     """Test TemplateProcessor class."""
 
@@ -83,9 +99,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         incoming_host = "example.com"
         request_headers = {"User-Agent": "test"}
 
-        mock_response = AsyncMock()
-        mock_response.text = "external content"
-        mock_response.raise_for_status = Mock()
+        mock_response = ok_response("external content")
         http_client.get.return_value = mock_response
 
         result = await processor.smart_fetch(url, incoming_host, request_headers)
@@ -105,9 +119,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         incoming_host = "example.com"
         request_headers = {"User-Agent": "test", "cookie": "session=123"}
 
-        mock_response = AsyncMock()
-        mock_response.text = "proxied content"
-        mock_response.raise_for_status = Mock()
+        mock_response = ok_response("proxied content")
         http_client.get.return_value = mock_response
 
         result = await processor.smart_fetch(url, incoming_host, request_headers)
@@ -134,9 +146,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         url = "https://example.com/netset.txt"
         suffix = ",PROXY"
 
-        mock_response = AsyncMock()
-        mock_response.is_success = True
-        mock_response.text = "192.168.1.0/24\n10.0.0.0/8"
+        mock_response = ok_response("192.168.1.0/24\n10.0.0.0/8")
         http_client.get.return_value = mock_response
 
         result = await processor.expand_netset(url, suffix)
@@ -177,9 +187,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         url = "https://example.com/netset.txt"
         suffix = ",PROXY"
 
-        mock_response = AsyncMock()
-        mock_response.is_success = True
-        mock_response.text = "192.168.1.0/24"
+        mock_response = ok_response("192.168.1.0/24")
         http_client.get.side_effect = [
             httpx.ReadTimeout("timed out"),
             mock_response,
@@ -214,9 +222,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
         """A failed NETSET inside a RULE-SET must not degrade to a comment."""
         task = {"url": "https://example.com/rules.txt", "suffix": ",PROXY"}
 
-        rule_response = AsyncMock()
-        rule_response.text = "#NETSET https://example.com/netset.txt"
-        rule_response.raise_for_status = Mock()
+        rule_response = ok_response("#NETSET https://example.com/netset.txt")
 
         netset_response = AsyncMock()
         netset_response.is_success = False
@@ -265,16 +271,12 @@ IP-CIDR,192.168.1.0/24,DIRECT
         request_headers = {"User-Agent": "test"}
 
         # Mock the rule list response
-        rule_response = AsyncMock()
-        rule_response.text = (
+        rule_response = ok_response(
             "#NETSET https://example.com/netset.txt\n#NETSET https://test.com/block.txt"
         )
-        rule_response.raise_for_status = Mock()
 
         # Mock NETSET responses
-        netset_response = AsyncMock()
-        netset_response.text = "192.168.1.0/24"
-        netset_response.is_success = True
+        netset_response = ok_response("192.168.1.0/24")
 
         http_client.get.side_effect = [rule_response, netset_response, netset_response]
 
@@ -294,13 +296,13 @@ IP-CIDR,192.168.1.0/24,DIRECT
         request_headers = {"User-Agent": "test"}
 
         # Mock the rule list response
-        rule_response = AsyncMock()
-        rule_response.text = """
+        rule_response = ok_response(
+            """
 DOMAIN,example.com,PROXY
 DOMAIN-SUFFIX,test.com,DIRECT
 IP-CIDR,192.168.1.0/24,DIRECT
 """
-        rule_response.raise_for_status = Mock()
+        )
 
         http_client.get.return_value = rule_response
 
@@ -327,9 +329,7 @@ DOMAIN,example.com,PROXY
         request_headers = {"User-Agent": "test"}
 
         # Mock responses
-        rule_response = AsyncMock()
-        rule_response.text = "DOMAIN,test.com,PROXY"
-        rule_response.raise_for_status = Mock()
+        rule_response = ok_response("DOMAIN,test.com,PROXY")
 
         http_client.get.return_value = rule_response
 

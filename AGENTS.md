@@ -296,20 +296,42 @@ wired into `TemplateProcessor.fetch_list_text()`:
   inherits ownership from `/cache` in the image instead (`Dockerfile`: `mkdir -p /cache/lists &&
   chown -R app:app /cache`).
 - **Every filesystem error is swallowed and logged.** A broken cache degrades to "fetch every time",
-  never to a failed request. Writes go through a temp file + `os.replace`, so a crash cannot leave a
-  half-written list that then looks valid for a month.
+  never to a failed request. Writes go through a temp file + `fsync` + `os.replace`, so neither a
+  crash nor a power loss can leave a half-written list that then looks valid for a month. Because
+  every error is silent, `lifespan` probes the directory once at startup and logs `ERROR` if it is
+  not writable — otherwise a cache that never stores anything looks exactly like one that works.
 - **Single-flight**: a module-level lock per cache key, so a TTL expiry sends *one* request upstream
   instead of one per concurrent client. Waiters re-read the cache after the lock and get what the
   leader wrote.
-- **Failure backoff** (`LIST_FAILURE_BACKOFF`, 60 s): after a failure, requests holding a stale copy
-  skip the network entirely for a minute. Without it every request would pay
-  `LIST_ATTEMPTS × LIST_TIMEOUT` = 45 s per broken list before falling back — serialized behind the
-  single-flight lock, which would be far worse than the outage itself. Gatus's timeout is 48 s.
+- **Failure backoff** (`LIST_FAILURE_BACKOFF`, 60 s): after a failure, requests skip the network
+  entirely for a minute — serving the stale copy, or raising with the *remembered* reason (so the
+  504-vs-502 split survives) when there is nothing on disk. The check runs **both before and inside
+  the single-flight lock**, and the in-lock one is the load-bearing half: everyone who queued up
+  while the leader was inside its `LIST_ATTEMPTS × LIST_TIMEOUT` = 45 s failure would otherwise run
+  that same cycle again, one after another — 45 s / 90 s / 135 s … against a ~48 s Gatus timeout,
+  and unbounded queue growth with an empty cache. Pinned by
+  `test_queued_requests_do_not_each_retry_a_failing_list` and its empty-cache twin; do not "simplify"
+  either check away.
+- **Only a complete `200` is cached.** `raise_for_status` alone is not enough: `204`, `206 Partial
+  Content` (plausible from a proxy — relay list fetches go through sing-box's mixed inbound) and a
+  zero-length `200` all pass it, and caching one would pin the truncation for a day *and* keep it as
+  the fallback for a month. `_raise_for_list_status` rejects anything that is not a non-empty `200`,
+  which routes it into the normal stale-fallback path.
+- **Our own lists get a 60 s window, not 24 h** (`LIST_CACHE_OWN_HOSTS`, default `s.dimonb.com`, plus
+  `CONFIG_HOST`/`API_HOST`). The `.list` files under `s.dimonb.com/lists/` are hand-edited by the
+  per-site routing workflow and must reach clients in minutes; only the "don't even ask" window is
+  short — they still get the full 30-day outage fallback.
 - The same-host branch of `smart_fetch` (RULE-SETs proxied via `API_HOST`, our own origin) is
-  **deliberately uncached** — the response varies with the caller's headers and a config edit must
-  not take a day to appear. `API_HOST` is unset in production, so that branch is dormant anyway.
+  **deliberately uncached** — the response varies with the caller's headers. `API_HOST` is unset in
+  production, so that branch is dormant and the `LIST_CACHE_OWN_HOSTS` window is what actually
+  applies to our lists.
+- **A stale copy older than 3 days logs `ERROR`**, not `WARNING`. Serving from cache is a fallback;
+  days of it means the URL is permanently broken (repo renamed, file moved) and the endpoint has been
+  answering 200 while nobody noticed — the strict-502 contract used to page for exactly this.
+- A cache entry stamped **in the future** (clock stepped back: bad boot clock, hypervisor migration)
+  is distrusted rather than clamped to age 0 — otherwise it would be fresh forever *and* unprunable.
 - Tunables, all env-overridable: `LIST_CACHE_DIR`, `LIST_CACHE_FRESH_SECONDS`,
-  `LIST_CACHE_MAX_AGE_SECONDS`. Inspect with
+  `LIST_CACHE_MAX_AGE_SECONDS`, `LIST_CACHE_OWN_HOSTS`, `LIST_CACHE_OWN_FRESH_SECONDS`. Inspect with
   `docker run --rm -v vpn-cfgapp-cache:/c alpine ls -l /c/lists`.
 - Tests isolate the cache per-test via `tests/conftest.py` (autouse, points `list_cache_dir` at
   `tmp_path`). **Without it a body cached by one test satisfies the next test's fetch**, the mocked

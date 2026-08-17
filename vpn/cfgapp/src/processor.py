@@ -35,11 +35,17 @@ LIST_ATTEMPTS = 3
 # endpoint during someone else's outage. Recheck at most this often.
 LIST_FAILURE_BACKOFF = 60.0
 
+# Serving a stale copy is a fallback, not a steady state. Past this age it means
+# the URL has been broken for days (repo renamed, file moved) and nobody noticed,
+# because the endpoint kept answering 200 — so say so at a level that pages.
+LIST_STALE_ALERT_SECONDS = 3 * 24 * 60 * 60
+
 # Concurrent requests all expand the same handful of lists, so a TTL expiry would
 # otherwise send N identical fetches upstream at once. One request refreshes;
 # the rest wait for it and read what it wrote. Keyed by cache key, per process.
 _refresh_locks: dict[str, asyncio.Lock] = {}
 _failed_until: dict[str, float] = {}
+_failed_reason: dict[str, object] = {}
 
 
 def _refresh_lock(key: str) -> asyncio.Lock:
@@ -48,6 +54,22 @@ def _refresh_lock(key: str) -> asyncio.Lock:
     if lock is None:
         lock = _refresh_locks[key] = asyncio.Lock()
     return lock
+
+
+def _in_backoff(key: str) -> bool:
+    """True while a recent failure means we should not re-probe this list."""
+    return time.monotonic() < _failed_until.get(key, 0.0)
+
+
+def _record_failure(key: str, reason: object) -> None:
+    """Remember why a list failed, so waiters can fail the same way, fast."""
+    _failed_until[key] = time.monotonic() + LIST_FAILURE_BACKOFF
+    _failed_reason[key] = reason
+
+
+def _clear_failure(key: str) -> None:
+    _failed_until.pop(key, None)
+    _failed_reason.pop(key, None)
 
 
 class ListFetchError(Exception):
@@ -83,6 +105,14 @@ class TemplateProcessor:
             settings.list_cache_fresh_seconds,
             settings.list_cache_max_age_seconds,
         )
+        self.own_hosts = {
+            host.strip().lower()
+            for host in (
+                settings.list_cache_own_hosts.split(",")
+                + [settings.config_host, settings.api_host]
+            )
+            if host.strip()
+        }
 
     async def _fetch_list(self, url: str, **kwargs) -> httpx.Response:
         """GET a list URL, retrying transient transport/timeout failures.
@@ -103,11 +133,53 @@ class TemplateProcessor:
 
     @staticmethod
     def _raise_for_list_status(url: str, response: httpx.Response) -> None:
-        """Turn a non-success list response into a hard failure."""
+        """Turn anything that is not a complete list body into a hard failure.
+
+        Not just non-2xx: a `204 No Content`, a `206 Partial Content` from a
+        misbehaving proxy, or a zero-length `200` all pass ``raise_for_status``,
+        and caching one of those would pin the truncation for a day and keep it
+        as the fallback for a month — the exact failure this module exists to
+        prevent, made sticky.
+        """
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             raise ListFetchError(url, e) from e
+        if response.status_code != 200:
+            raise ListFetchError(url, f"unexpected HTTP {response.status_code}")
+        if not response.text.strip():
+            raise ListFetchError(url, "empty body")
+
+    def _fresh_seconds_for(self, url: str) -> float:
+        """How long a copy may be served without asking upstream at all."""
+        host = urlparse(url).netloc.rsplit("@", 1)[-1].rsplit(":", 1)[0].lower()
+        if host in self.own_hosts:
+            return settings.list_cache_own_fresh_seconds
+        return self.list_cache.fresh_seconds
+
+    def _serve_after_failure(self, url: str, key: str) -> str:
+        """Answer from disk while a recent failure is still being backed off.
+
+        Never falls through to a fetch: the whole point is that the request
+        after a 45 s failure must not spend another 45 s proving it again.
+        """
+        cached = self.list_cache.read_stale(key)
+        if cached is None:
+            raise ListFetchError(url, _failed_reason.get(key, "upstream unavailable"))
+        self._log_stale(key, cached.age, _failed_reason.get(key))
+        return cached.text
+
+    @staticmethod
+    def _log_stale(key: str, age: float, reason: object) -> None:
+        """A stale copy is a fallback; days of it is an outage nobody saw."""
+        message = (
+            f"List fetch failed ({reason!r}), serving cached copy "
+            f"{age / 3600:.1f}h old: {key}"
+        )
+        if age > LIST_STALE_ALERT_SECONDS:
+            logger.error(f"{message} — this list has been broken for days")
+        else:
+            logger.warning(message)
 
     async def fetch_list_text(
         self, url: str, cache_key: str | None = None, **kwargs
@@ -119,40 +191,40 @@ class TemplateProcessor:
         differs from the one the template names.
         """
         key = cache_key or url
+        fresh_seconds = self._fresh_seconds_for(url)
 
-        cached = self.list_cache.read_fresh(key)
+        cached = self.list_cache.read(key, fresh_seconds)
         if cached is not None:
             logger.debug(f"List cache hit ({cached.age / 3600:.1f}h old): {key}")
             return cached.text
 
-        # Recently failed and we still have something usable — do not spend
-        # another LIST_ATTEMPTS * LIST_TIMEOUT finding out it is still broken.
-        if time.monotonic() < _failed_until.get(key, 0.0):
-            cached = self.list_cache.read_stale(key)
-            if cached is not None:
-                return cached.text
+        if _in_backoff(key):
+            return self._serve_after_failure(url, key)
 
         async with _refresh_lock(key):
-            # Whoever held the lock may have just refreshed it for us.
-            cached = self.list_cache.read_fresh(key)
+            # Whoever held the lock may have just refreshed it for us...
+            cached = self.list_cache.read(key, fresh_seconds)
             if cached is not None:
                 return cached.text
+            # ...or may have just failed. Re-check *inside* the lock: everyone
+            # who queued up before the leader recorded its failure would
+            # otherwise run their own full retry cycle, one after another, and
+            # turn a slow upstream into an unbounded queue of 45 s requests.
+            if _in_backoff(key):
+                return self._serve_after_failure(url, key)
 
             try:
                 response = await self._fetch_list(url, **kwargs)
-                self._raise_for_list_status(key, response)
+                self._raise_for_list_status(url, response)
             except ListFetchError as e:
-                _failed_until[key] = time.monotonic() + LIST_FAILURE_BACKOFF
+                _record_failure(key, e.reason)
                 cached = self.list_cache.read_stale(key)
                 if cached is None:
                     raise
-                logger.warning(
-                    f"List fetch failed ({e.reason!r}), serving cached copy "
-                    f"{cached.age / 3600:.1f}h old: {key}"
-                )
+                self._log_stale(key, cached.age, e.reason)
                 return cached.text
 
-            _failed_until.pop(key, None)
+            _clear_failure(key)
             self.list_cache.write(key, response.text)
             return response.text
 
