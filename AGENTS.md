@@ -32,6 +32,12 @@ templates. Pick a matching `ENV_FILE` / `CONFIG_FILE` / `SERVERS_FILE`:
 | ebac (corp) | `.env.ebac` | `config.ebac.json` | `servers.ebac.cfg` | `ubuntu` (+sudo) | 47024 |
 | dimonb (personal) | `.env` (default) | `config.json` | `servers.cfg` | `root` | 47012 |
 
+> **Select a profile by its `ENV_FILE` and let that carry the rest** — `.env.ebac` already sets
+> `CONFIG_FILE`, `SERVERS_FILE`, `BASE_URL` and the ebac ports/secrets, so `make deploy ENV_FILE=.env.ebac`
+> is the whole command ("остальное подхватится"). **Never hand-pass `CONFIG_FILE=`/`SERVERS_FILE=` from
+> one row while leaving `ENV_FILE` on another row's value** — that ships one profile's secrets/ports onto
+> the other profile's servers. See [Operating the deploy safely](#operating-the-deploy-safely-dont-shoot-your-own-foot).
+
 > **`config*.json`, `.env*`, `servers*.cfg` are gitignored** (local only). Only the templates,
 > playbook, Makefile, and `cfgapp` code are tracked. A fix that lives only in `config.json` is
 > **not** in git — it lives on the operator's machine and is applied via deploy.
@@ -39,7 +45,8 @@ templates. Pick a matching `ENV_FILE` / `CONFIG_FILE` / `SERVERS_FILE`:
 ## How deploy works
 
 ```
-make deploy ENV_FILE=.env.ebac CONFIG_FILE=config.ebac.json SERVERS_FILE=servers.ebac.cfg [TEST_ONLY=<host>]
+make deploy ENV_FILE=.env.ebac [TEST_ONLY=<host>]     # ebac: .env.ebac carries CONFIG_FILE + SERVERS_FILE
+make deploy                     [TEST_ONLY=<host>]     # personal: bare defaults (.env / config.json / servers.cfg)
 ```
 1. `check-env` validates required vars are set in the ENV_FILE.
 2. `ansible-playbook -i <SERVERS_FILE> deploy_vpn.yml -e "<vars from ENV_FILE>"`.
@@ -49,6 +56,54 @@ make deploy ENV_FILE=.env.ebac CONFIG_FILE=config.ebac.json SERVERS_FILE=servers
   inventory group is recreated.**
 - **Consequence:** any hand-edit made directly on a server is **overwritten on the next deploy**.
   Persistent changes must go into the templates and/or `config*.json`.
+
+## Operating the deploy safely (don't shoot your own foot)
+
+The Makefile has **two knobs that must agree**: the *secrets/ports* (from `ENV_FILE`) and the
+*config + inventory* (`CONFIG_FILE` + `SERVERS_FILE`). Each profile above is a matched set. `make`
+does **not** warn if you cross them, and the classic self-inflicted wound is deploying **one
+profile's secrets onto another profile's servers.**
+
+**Golden rule — the three knobs must come from the same profile row.** Two safe forms:
+- pass only `ENV_FILE=.env.ebac` (it already supplies `CONFIG_FILE`+`SERVERS_FILE`) — simplest for ebac; or
+- set all three explicitly as one matched triple (the `ENVF/CFG/SRV` vars in [`doc/RUNBOOK_deploy.md`](doc/RUNBOOK_deploy.md)).
+
+**The footgun is specifying *some but not all*** — e.g. `make deploy CONFIG_FILE=config.ebac.json
+SERVERS_FILE=servers.ebac.cfg` **without** `ENV_FILE`. That silently pairs the ebac servers with the
+*default* `.env`'s salt/ports (the personal profile). If you're typing `CONFIG_FILE=`/`SERVERS_FILE=`,
+you **must** also set the matching `ENV_FILE=` — or just drop them and use `ENV_FILE=` alone.
+
+**Why a mismatch is destructive** (all silent — no error, the deploy "succeeds"):
+- **Wrong `SALT`** → every credential is `sha256("<user>.<SALT>")`, so all hy2 passwords / vless UUIDs
+  change at once. Existing client subscriptions stop authenticating ⇒ **fleet-wide outage** until every
+  user re-fetches. This is the worst one.
+- **Wrong `HYSTERIA2_PORT` / `HYSTERIA2_V2_PORT`** → sing-box binds ports the clients don't dial ⇒ hy2 dead.
+- **Wrong `OBFS_PASSWORD`** → salamander obfs mismatch ⇒ connections rejected.
+
+**Pre-flight, every time:**
+1. **Read the first banner line** the deploy prints — it echoes the ports:
+   `Using ports - … Hysteria2: 47024, Hysteria2-v2: 47031` ⇒ **ebac**; `47012 / 47013` ⇒ **personal**.
+   Wrong number for the fleet you're targeting = wrong `ENV_FILE` ⇒ **abort immediately.**
+2. For a risky or first-of-its-kind change, scope to one host with `TEST_ONLY=<host>` before the fleet.
+3. Run it in the background and watch to the end — `up --force-recreate` restarts every container, i.e. a
+   brief connectivity blip for all users on each host.
+
+**There is a safety window — use it.** The playbook runs strictly in this order: rsync code → **render
+all `vpn/*.j2` templates to disk** → `docker compose build` → `docker compose up --force-recreate`.
+Only that last task swaps the *running* services. Therefore:
+- Catch a mistake **before** the `Build docker-compose apps` / `Run Docker Compose` tasks → **stop the run**
+  (TaskStop / Ctrl-C). The mis-rendered files sit on disk but are **inert**; the live containers keep their
+  previous good config. **No user impact.** (Files rendered onto hosts are only picked up on the *next*
+  `up`.)
+- **Recovery is just: re-run with the correct `ENV_FILE`.** It re-renders every template (overwriting the
+  bad files) and force-recreates the containers correctly. Nothing else to clean up on the hosts.
+- If the recreate step already ran with the wrong profile, the breakage is live — recover the same way,
+  immediately: re-deploy the correct profile.
+
+**Two more foot-guns:**
+- `config*.json` / `.env*` / `servers*.cfg` are **gitignored** — a fix living only there is not in git,
+  it's on the operator's laptop. Back up the salts; losing them logs everyone out.
+- Never edit configs directly on a server — the next deploy wipes them. Change the template / `config*.json`.
 
 ## How a host's role is decided (relay vs leaf)
 
