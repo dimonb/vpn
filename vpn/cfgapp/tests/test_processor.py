@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 
-from src.processor import NETSET_RE, RULE_RE, TemplateProcessor
+from src.processor import LIST_ATTEMPTS, NETSET_RE, RULE_RE, TemplateProcessor
 
 
 class TestTemplateProcessor:
@@ -156,6 +156,42 @@ IP-CIDR,192.168.1.0/24,DIRECT
 
         assert len(result) == 1
         assert result[0] == f"# NETSET fetch failed: {url} (404)"
+
+    @pytest.mark.asyncio
+    async def test_expand_netset_retries_transient_timeout(
+        self, processor: TemplateProcessor, http_client: AsyncMock
+    ) -> None:
+        """A transient timeout must not drop the whole list."""
+        url = "https://example.com/netset.txt"
+        suffix = ",PROXY"
+
+        mock_response = AsyncMock()
+        mock_response.is_success = True
+        mock_response.text = "192.168.1.0/24"
+        http_client.get.side_effect = [
+            httpx.ReadTimeout("timed out"),
+            mock_response,
+        ]
+
+        result = await processor.expand_netset(url, suffix)
+
+        assert http_client.get.call_count == 2
+        assert any("IP-CIDR,192.168.0.0/18" in line for line in result)
+
+    @pytest.mark.asyncio
+    async def test_expand_netset_timeout_exhausts_attempts(
+        self, processor: TemplateProcessor, http_client: AsyncMock
+    ) -> None:
+        """A permanent timeout degrades gracefully after all attempts."""
+        url = "https://example.com/netset.txt"
+        suffix = ",PROXY"
+
+        http_client.get.side_effect = httpx.ReadTimeout("timed out")
+
+        result = await processor.expand_netset(url, suffix)
+
+        assert http_client.get.call_count == LIST_ATTEMPTS
+        assert result == [f"# NETSET error: {url}"]
 
     @pytest.mark.asyncio
     async def test_expand_rule_set_with_netset(

@@ -1,8 +1,8 @@
 """Core processing logic for RULE-SET and NETSET expansion."""
 
 import asyncio
+import logging
 import re
-import traceback
 from urllib.parse import urlparse
 
 import httpx
@@ -10,11 +10,22 @@ import httpx
 from .config import settings
 from .utils import dedupe_lines, netset_expand
 
+logger = logging.getLogger(__name__)
+
 # Regular expressions for parsing
 RULE_RE = re.compile(
     r"^\s*RULE-SET\s*,\s*([^,\s]+)\s*,\s*([^#]+?)\s*(?:#.*)?$", re.IGNORECASE
 )
 NETSET_RE = re.compile(r"^#NETSET\s+(\S+)", re.IGNORECASE)
+
+# RULE-SET / NETSET list fetches are large, cacheable bodies and are *not*
+# latency-sensitive (unlike the origin fetch in main.py, which keeps its own
+# short ORIGIN_TIMEOUT). On a relay they also travel through the sing-box
+# tunnel, and on a CPU-starved VPS httpx's 5 s default expired mid-fetch — the
+# list was then silently dropped from the rendered config, so the same URL
+# returned a truncated body on some requests. Be patient, and retry.
+LIST_TIMEOUT = 15.0
+LIST_ATTEMPTS = 3
 
 
 class TemplateProcessor:
@@ -23,6 +34,23 @@ class TemplateProcessor:
     def __init__(self, http_client: httpx.AsyncClient):
         """Initialize processor with HTTP client."""
         self.http_client = http_client
+
+    async def _fetch_list(self, url: str, **kwargs) -> httpx.Response:
+        """GET a list URL, retrying transient transport/timeout failures.
+
+        Each attempt is a fresh request, so a retry also re-resolves and can
+        land on a different address.
+        """
+        last_error: Exception | None = None
+        for attempt in range(1, LIST_ATTEMPTS + 1):
+            try:
+                return await self.http_client.get(url, **kwargs)
+            except (httpx.TimeoutException, httpx.TransportError) as e:
+                last_error = e
+                logger.warning(
+                    f"List fetch attempt {attempt}/{LIST_ATTEMPTS} failed for {url}: {e!r}"
+                )
+        raise last_error
 
     async def smart_fetch(
         self, url_str: str, incoming_host: str, request_headers: dict
@@ -41,13 +69,13 @@ class TemplateProcessor:
             headers = dict(request_headers)
             headers.pop("cookie", None)  # Remove cookies
 
-            response = await self.http_client.get(proxy_url, headers=headers)
+            response = await self._fetch_list(proxy_url, headers=headers)
             response.raise_for_status()
             return response.text
         else:
             # Direct fetch for external URLs (including ALT_HOST)
             print(f"Direct fetch for: {url_str}")
-            response = await self.http_client.get(url_str)
+            response = await self._fetch_list(url_str)
             response.raise_for_status()
             return response.text
 
@@ -55,9 +83,9 @@ class TemplateProcessor:
         """Fetch and expand NETSET file."""
         print(f"Fetching NETSET: {url_str}")
         try:
-            response = await self.http_client.get(url_str)
+            response = await self._fetch_list(url_str)
             if not response.is_success:
-                print(f"NETSET fetch failed: {response.status_code}")
+                logger.error(f"NETSET fetch failed: {url_str} ({response.status_code})")
                 return [f"# NETSET fetch failed: {url_str} ({response.status_code})"]
 
             text = response.text
@@ -82,7 +110,12 @@ class TemplateProcessor:
             return expanded
 
         except Exception as e:
-            print(f"NETSET error {url_str}: {str(e)}")
+            # Degrade gracefully (a config is still served), but make it loud:
+            # str(e) is empty for httpx timeouts, so log the repr.
+            logger.error(
+                f"NETSET error after {LIST_ATTEMPTS} attempt(s): {url_str}: {e!r}",
+                exc_info=True,
+            )
             return [f"# NETSET error: {url_str}"]
 
     def parse_template(
@@ -173,8 +206,10 @@ class TemplateProcessor:
             return dedupe_lines(output)
 
         except Exception as e:
-            print(f"List fetch failed: {url} -> {str(e)}")
-            traceback.print_exc()
+            logger.error(
+                f"List fetch failed after {LIST_ATTEMPTS} attempt(s): {url} -> {e!r}",
+                exc_info=True,
+            )
             return [f"# RULE-SET fetch failed: {url}"]
 
     async def process_template(

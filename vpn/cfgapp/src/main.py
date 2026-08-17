@@ -16,7 +16,7 @@ from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
 from .happ_processor import HappProcessor
-from .processor import TemplateProcessor
+from .processor import LIST_TIMEOUT, TemplateProcessor
 from .proxy_config import ProxyConfig
 
 # Configure logging
@@ -365,8 +365,9 @@ async def proxy_handler(request: Request, path: str):
         if "AUTH" in tags:
             require_auth(request, proxy_config)
 
-        # Create HTTP client for template processor
-        async with httpx.AsyncClient() as http_client:
+        # Create HTTP client for template processor (list fetches are big and
+        # tunneled — httpx's 5 s default is far too tight, see LIST_TIMEOUT)
+        async with httpx.AsyncClient(timeout=LIST_TIMEOUT) as http_client:
             # Create template processor
             template_processor = TemplateProcessor(http_client)
 
