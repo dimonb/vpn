@@ -94,7 +94,19 @@
           "max_time_difference": "10m"
         }
       }
-    }
+    }{% if forward_group and config.subs.get(forward_group) %},
+    {
+      "type": "mixed",
+      "tag": "cfgapp-in",
+      "listen": "{{ tunnel_proxy_gateway | default('172.29.77.1') }}",
+      "listen_port": {{ tunnel_proxy_port | default(1080) }},
+      "users": [
+        {
+          "username": "cfgapp",
+          "password": "{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}"
+        }
+      ]
+    }{% endif %}
   ],
   {% if (forward_group and config.subs.get(forward_group)) or (forward_il_group and config.subs.get(forward_il_group)) %}
   "outbounds": [
@@ -240,6 +252,9 @@
     "default_domain_resolver": { "server": "quad9-doh" },
     "rules": [
       { "ip_is_private": true, "outbound": "direct-out" },
+      {% if forward_group and config.subs.get(forward_group) %}
+      { "inbound": "cfgapp-in", "outbound": "auto" },
+      {% endif %}
       {% if forward_group and config.subs.get(forward_group) %}{% set fwd_hosts = [] %}{% for _n, _it in config.subs[forward_group].items() %}{% set _ = fwd_hosts.append(_it.host) %}{% endfor %}{% if 'am-1.outline.ebac.dev' in fwd_hosts %}
       { "domain_suffix": ["ficbook.net"], "outbound": "am-1.outline.ebac.dev" },
       {% endif %}{% endif %}

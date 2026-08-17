@@ -116,6 +116,14 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
+# The origin is reached either directly or through the relay tunnel; both are
+# fast when they work, so fail quickly and retry instead of hanging. A retry
+# opens a fresh connection, which on a direct route also re-resolves the origin
+# and picks a different address — useful when only some of them are reachable.
+ORIGIN_TIMEOUT = 3.0
+ORIGIN_ATTEMPTS = 3
+
+
 async def forward_request(request: Request, path_with_search: str) -> httpx.Response:
     """Forward request to origin API."""
     target = f"https://{settings.config_host}{path_with_search}"
@@ -126,22 +134,26 @@ async def forward_request(request: Request, path_with_search: str) -> httpx.Resp
     headers.pop("cookie", None)  # Remove cookies
     headers.pop("host", None)  # Remove host header
 
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(target, headers=headers, timeout=30.0)
-            return response
-    except httpx.ConnectError as e:
-        logger.error(f"Connection error to origin: {e}")
-        raise HTTPException(status_code=502, detail="Bad Gateway") from e
-    except httpx.TimeoutException as e:
-        logger.error(f"Timeout error to origin: {e}")
-        raise HTTPException(status_code=504, detail="Gateway Timeout") from e
-    except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP status error from origin: {e}")
-        raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
-    except Exception as e:
-        logger.error(f"Unexpected error to origin: {e}")
-        raise HTTPException(status_code=500, detail="Internal Server Error") from e
+    last_error: Exception | None = None
+    for attempt in range(1, ORIGIN_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(timeout=ORIGIN_TIMEOUT) as client:
+                return await client.get(target, headers=headers)
+        except (httpx.TimeoutException, httpx.TransportError) as e:
+            last_error = e
+            logger.warning(
+                f"Origin attempt {attempt}/{ORIGIN_ATTEMPTS} failed for {target}: {e!r}"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error to origin: {e}")
+            raise HTTPException(status_code=500, detail="Internal Server Error") from e
+
+    if isinstance(last_error, httpx.TimeoutException):
+        logger.error(f"Timeout error to origin after {ORIGIN_ATTEMPTS} attempts: {last_error}")
+        raise HTTPException(status_code=504, detail="Gateway Timeout") from last_error
+
+    logger.error(f"Connection error to origin after {ORIGIN_ATTEMPTS} attempts: {last_error}")
+    raise HTTPException(status_code=502, detail="Bad Gateway") from last_error
 
 
 @app.get("/health")
