@@ -273,11 +273,16 @@
       {% endif %}
     ],
     "rule_set": [
+    {# raw.githubusercontent.com is both blocked from RU and prone to global 429s, and
+       sing-box treats a failed rule-set download at startup as FATAL — on 2026-08-17 that
+       took the whole node down. jsDelivr mirrors the same repos and is reachable from RU. #}
+    {% set geoip_rule_set_base = geoip_rule_set_base | default('https://cdn.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set') %}
+    {% set geosite_rule_set_base = geosite_rule_set_base | default('https://cdn.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set') %}
       {
         "tag": "geoip-ru",
         "type": "remote",
         "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs",
+        "url": "{{ geoip_rule_set_base }}/geoip-ru.srs",
         "download_detour": "direct-out"
       },
       {
@@ -293,7 +298,7 @@
         "tag": "geoip-il",
         "type": "remote",
         "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-il.srs",
+        "url": "{{ geoip_rule_set_base }}/geoip-il.srs",
         "download_detour": "direct-out"
       },
       {
@@ -305,28 +310,28 @@
         "tag": "geosite-google",
         "type": "remote",
         "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-google.srs",
+        "url": "{{ geosite_rule_set_base }}/geosite-google.srs",
         "download_detour": "direct-out"
       },
       {
         "tag": "geosite-telegram",
         "type": "remote",
         "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-telegram.srs",
+        "url": "{{ geosite_rule_set_base }}/geosite-telegram.srs",
         "download_detour": "direct-out"
       },
       {
         "tag": "geosite-facebook",
         "type": "remote",
         "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-facebook.srs",
+        "url": "{{ geosite_rule_set_base }}/geosite-facebook.srs",
         "download_detour": "direct-out"
       },
       {
         "tag": "geosite-instagram",
         "type": "remote",
         "format": "binary",
-        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-instagram.srs",
+        "url": "{{ geosite_rule_set_base }}/geosite-instagram.srs",
         "download_detour": "direct-out"
       }
 

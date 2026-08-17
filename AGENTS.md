@@ -318,6 +318,39 @@ wired into `TemplateProcessor.fetch_list_text()`:
 The 502-instead-of-truncation contract itself is unchanged; see
 [cfgapp's own egress on relays](#cfgapps-own-egress-on-relays-origin-fetches-go-through-the-tunnel).
 
+## sing-box dies if it cannot download its rule-sets (restarts are not free)
+
+**A failed remote rule-set download at startup is FATAL to sing-box**, and the node's whole data
+plane goes with it:
+
+```
+FATAL start service: (initialize rule-set[0]: initial rule-set: geoip-ru:
+  unexpected status: 429 Too Many Requests | ... context canceled)
+```
+
+`vpn/sing-box.json.j2` declares six `"type": "remote"` rule-sets (geoip-ru/il,
+geosite-google/telegram/facebook/instagram). They are downloaded on **every start**, over
+`direct-out`, and one failure aborts the process — which then crash-loops. On 2026-08-17 a routine
+deploy of ru-0 during the raw.githubusercontent.com 429 turned a config-endpoint outage into a
+**full node outage**: sing-box gone → the `cfgapp-in` tunnel gone → cfgapp could not even reach its
+origin → the relay was dead until the URLs were changed.
+
+- **They now point at jsDelivr** (`cdn.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/…`), which
+  mirrors the same repos, is reachable from RU, and was up while raw was not. The bases are Jinja
+  vars (`geoip_rule_set_base` / `geosite_rule_set_base`) so a future move is a one-line override.
+- **The dependency is not gone, only moved.** jsDelivr fetches from GitHub too — during the same
+  incident it answered `Failed to fetch lord-alfred/ipranges@main from GitHub` for a repo it had not
+  cached. What saved ru-0 was that the SagerNet rule-sets were already at jsDelivr's edge.
+- **Therefore: do not deploy (or otherwise restart sing-box on) a healthy RU host while GitHub is
+  having an incident.** A running sing-box holds its rule-sets in memory and does not care; a
+  restarted one may not come back. Check
+  `curl -o /dev/null -w '%{http_code}' https://cdn.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-ru.srs`
+  first.
+- Still open: making this survivable rather than merely less likely — either `experimental.cache_file`
+  (sing-box keeps downloaded rule-sets across restarts, but needs one good download to seed) or
+  shipping the `.srs` files with the deploy as `"type": "local"`, which removes the startup network
+  dependency outright. The latter is the same move as mirroring the xray image.
+
 ## Per-site routing (send a domain direct / to a specific exit)
 
 Single source of truth is the inline `domain-ru` rule_set — both the DNS rule
