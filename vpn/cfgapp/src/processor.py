@@ -28,6 +28,26 @@ LIST_TIMEOUT = 15.0
 LIST_ATTEMPTS = 3
 
 
+class ListFetchError(Exception):
+    """A RULE-SET/NETSET list could not be fetched.
+
+    Must propagate all the way to the request handler: a config rendered
+    without one of its lists looks perfectly valid to a client, which then
+    replaces a working subscription with one missing whole CIDR blocks. An
+    error instead lets the client keep its last good config.
+    """
+
+    def __init__(self, url: str, reason: object):
+        super().__init__(f"{url}: {reason!r}")
+        self.url = url
+        self.reason = reason
+
+    @property
+    def is_timeout(self) -> bool:
+        """True when the list was lost to a timeout (→ 504 rather than 502)."""
+        return isinstance(self.reason, httpx.TimeoutException)
+
+
 class TemplateProcessor:
     """Process template files and expand RULE-SET entries."""
 
@@ -50,7 +70,15 @@ class TemplateProcessor:
                 logger.warning(
                     f"List fetch attempt {attempt}/{LIST_ATTEMPTS} failed for {url}: {e!r}"
                 )
-        raise last_error
+        raise ListFetchError(url, last_error) from last_error
+
+    @staticmethod
+    def _raise_for_list_status(url: str, response: httpx.Response) -> None:
+        """Turn a non-success list response into a hard failure."""
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise ListFetchError(url, e) from e
 
     async def smart_fetch(
         self, url_str: str, incoming_host: str, request_headers: dict
@@ -70,53 +98,46 @@ class TemplateProcessor:
             headers.pop("cookie", None)  # Remove cookies
 
             response = await self._fetch_list(proxy_url, headers=headers)
-            response.raise_for_status()
+            self._raise_for_list_status(url_str, response)
             return response.text
         else:
             # Direct fetch for external URLs (including ALT_HOST)
             print(f"Direct fetch for: {url_str}")
             response = await self._fetch_list(url_str)
-            response.raise_for_status()
+            self._raise_for_list_status(url_str, response)
             return response.text
 
     async def expand_netset(self, url_str: str, suffix: str) -> list[str]:
-        """Fetch and expand NETSET file."""
+        """Fetch and expand NETSET file.
+
+        Raises ListFetchError instead of returning a placeholder comment: the
+        caller must fail the request rather than serve the list's ranges away.
+        """
         print(f"Fetching NETSET: {url_str}")
-        try:
-            response = await self._fetch_list(url_str)
-            if not response.is_success:
-                logger.error(f"NETSET fetch failed: {url_str} ({response.status_code})")
-                return [f"# NETSET fetch failed: {url_str} ({response.status_code})"]
+        response = await self._fetch_list(url_str)
+        if not response.is_success:
+            raise ListFetchError(url_str, f"HTTP {response.status_code}")
 
-            text = response.text
-            expanded = netset_expand(
-                text,
-                suffix,
-                ipv4_block_prefix=settings.ipv4_block_prefix,
-                ipv6_block_prefix=settings.ipv6_block_prefix,
-                enable_compaction=settings.enable_compaction,
-                compact_target_max=settings.compact_target_max,
-                compact_min_prefix_v4=settings.compact_min_prefix_v4,
-                compact_min_prefix_v6=settings.compact_min_prefix_v6,
-            )
-            compaction_info = (
-                f" [compacted to ~{settings.compact_target_max}]"
-                if settings.enable_compaction
-                else ""
-            )
-            print(
-                f"NETSET expanded {len(expanded)} entries (IPv4→/{settings.ipv4_block_prefix}, IPv6→/{settings.ipv6_block_prefix}){compaction_info}"
-            )
-            return expanded
-
-        except Exception as e:
-            # Degrade gracefully (a config is still served), but make it loud:
-            # str(e) is empty for httpx timeouts, so log the repr.
-            logger.error(
-                f"NETSET error after {LIST_ATTEMPTS} attempt(s): {url_str}: {e!r}",
-                exc_info=True,
-            )
-            return [f"# NETSET error: {url_str}"]
+        text = response.text
+        expanded = netset_expand(
+            text,
+            suffix,
+            ipv4_block_prefix=settings.ipv4_block_prefix,
+            ipv6_block_prefix=settings.ipv6_block_prefix,
+            enable_compaction=settings.enable_compaction,
+            compact_target_max=settings.compact_target_max,
+            compact_min_prefix_v4=settings.compact_min_prefix_v4,
+            compact_min_prefix_v6=settings.compact_min_prefix_v6,
+        )
+        compaction_info = (
+            f" [compacted to ~{settings.compact_target_max}]"
+            if settings.enable_compaction
+            else ""
+        )
+        print(
+            f"NETSET expanded {len(expanded)} entries (IPv4→/{settings.ipv4_block_prefix}, IPv6→/{settings.ipv6_block_prefix}){compaction_info}"
+        )
+        return expanded
 
     def parse_template(
         self, template_text: str
@@ -143,74 +164,71 @@ class TemplateProcessor:
     async def expand_rule_set(
         self, task: dict, incoming_host: str, request_headers: dict
     ) -> list[str]:
-        """Expand a single RULE-SET entry."""
+        """Expand a single RULE-SET entry.
+
+        Raises ListFetchError if the rule list — or any NETSET it references —
+        cannot be fetched; the request must fail rather than render a config
+        with those rules missing.
+        """
         url = task["url"]
         suffix = task["suffix"]
 
         print(f'Expanding RULE-SET: {url} with suffix "{suffix}"')
 
-        try:
-            text = await self.smart_fetch(url, incoming_host, request_headers)
-            lines = text.split("\n")
+        text = await self.smart_fetch(url, incoming_host, request_headers)
+        lines = text.split("\n")
 
-            # Extract NETSET URLs
-            netset_urls = []
-            for line in lines:
-                line = line.strip()
-                match = NETSET_RE.match(line)
-                if match:
-                    netset_urls.append(match.group(1))
+        # Extract NETSET URLs
+        netset_urls = []
+        for line in lines:
+            line = line.strip()
+            match = NETSET_RE.match(line)
+            if match:
+                netset_urls.append(match.group(1))
 
-            # Process regular rules first
-            output = [f"# RULE-SET,{url}"]
-            for line in lines:
-                trimmed = line.strip()
-                if not trimmed or trimmed.startswith("#"):
-                    continue
+        # Process regular rules first
+        output = [f"# RULE-SET,{url}"]
+        for line in lines:
+            trimmed = line.strip()
+            if not trimmed or trimmed.startswith("#"):
+                continue
 
-                # Remove comments
-                hash_pos = trimmed.find("#")
-                if hash_pos != -1:
-                    trimmed = trimmed[:hash_pos].strip()
-                if not trimmed:
-                    continue
+            # Remove comments
+            hash_pos = trimmed.find("#")
+            if hash_pos != -1:
+                trimmed = trimmed[:hash_pos].strip()
+            if not trimmed:
+                continue
 
-                # Normalize commas
-                trimmed = re.sub(r"\s+,", ",", trimmed)
-                trimmed = re.sub(r",\s+", ",", trimmed)
+            # Normalize commas
+            trimmed = re.sub(r"\s+,", ",", trimmed)
+            trimmed = re.sub(r",\s+", ",", trimmed)
 
-                # Handle proxy/direct/reject suffixes
-                if re.search(r",(PROXY|DIRECT|REJECT)\s*$", trimmed, re.IGNORECASE):
-                    trimmed = re.sub(
-                        r",(PROXY|DIRECT|REJECT)\s*$",
-                        suffix,
-                        trimmed,
-                        flags=re.IGNORECASE,
-                    )
-                else:
-                    trimmed = f"{trimmed}{suffix}"
-
-                output.append(trimmed)
-
-            # Process NETSET entries if any
-            if netset_urls:
-                print(
-                    f"Found {len(netset_urls)} NETSET entr{'ies' if len(netset_urls) > 1 else 'y'} in {url}"
+            # Handle proxy/direct/reject suffixes
+            if re.search(r",(PROXY|DIRECT|REJECT)\s*$", trimmed, re.IGNORECASE):
+                trimmed = re.sub(
+                    r",(PROXY|DIRECT|REJECT)\s*$",
+                    suffix,
+                    trimmed,
+                    flags=re.IGNORECASE,
                 )
-                jobs = [self.expand_netset(ns_url, suffix) for ns_url in netset_urls]
-                results = await asyncio.gather(*jobs)
-                netset_results = [item for sublist in results for item in sublist]
-                output.extend(netset_results)
-                return dedupe_lines(output)
+            else:
+                trimmed = f"{trimmed}{suffix}"
 
+            output.append(trimmed)
+
+        # Process NETSET entries if any
+        if netset_urls:
+            print(
+                f"Found {len(netset_urls)} NETSET entr{'ies' if len(netset_urls) > 1 else 'y'} in {url}"
+            )
+            jobs = [self.expand_netset(ns_url, suffix) for ns_url in netset_urls]
+            results = await asyncio.gather(*jobs)
+            netset_results = [item for sublist in results for item in sublist]
+            output.extend(netset_results)
             return dedupe_lines(output)
 
-        except Exception as e:
-            logger.error(
-                f"List fetch failed after {LIST_ATTEMPTS} attempt(s): {url} -> {e!r}",
-                exc_info=True,
-            )
-            return [f"# RULE-SET fetch failed: {url}"]
+        return dedupe_lines(output)
 
     async def process_template(
         self, tpl_text: str, incoming_host: str = "", request_headers: dict = None

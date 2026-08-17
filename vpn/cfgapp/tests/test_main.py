@@ -84,3 +84,56 @@ class TestMainApp:
         assert "application/json" not in response.headers.get("content-type", "")
         # The content could be unaltered bytes or a re-serialized representation
         assert b"proxies:" in response.content
+
+    @patch("src.main.TemplateProcessor.process_template")
+    @patch("src.main.forward_request")
+    def test_proxy_handler_list_timeout_returns_504(
+        self, mock_forward: Mock, mock_process: Mock
+    ) -> None:
+        """A list lost to a timeout must fail the request, not serve a partial config."""
+        import httpx
+
+        from src.processor import ListFetchError
+
+        url = "https://raw.githubusercontent.com/list.txt"
+        mock_forward.side_effect = _origin_404_then_template()
+        mock_process.side_effect = ListFetchError(url, httpx.ReadTimeout("timed out"))
+
+        client = TestClient(app)
+        response = client.get("/contabo.conf")
+
+        assert response.status_code == 504
+        assert "IP-CIDR" not in response.text
+
+    @patch("src.main.TemplateProcessor.process_template")
+    @patch("src.main.forward_request")
+    def test_proxy_handler_list_error_returns_502(
+        self, mock_forward: Mock, mock_process: Mock
+    ) -> None:
+        """Any other list failure (e.g. non-success status) returns 502."""
+        from src.processor import ListFetchError
+
+        url = "https://raw.githubusercontent.com/list.txt"
+        mock_forward.side_effect = _origin_404_then_template()
+        mock_process.side_effect = ListFetchError(url, "HTTP 503")
+
+        client = TestClient(app)
+        response = client.get("/contabo.conf")
+
+        assert response.status_code == 502
+        assert "IP-CIDR" not in response.text
+
+
+def _origin_404_then_template() -> list:
+    """Origin 404 for the bare path, then a template with one RULE-SET."""
+    import httpx
+
+    request = httpx.Request("GET", "https://example.com/contabo.conf")
+    return [
+        httpx.Response(status_code=404, content=b"", request=request),
+        httpx.Response(
+            status_code=200,
+            content=b"RULE-SET,https://raw.githubusercontent.com/list.txt,PROXY\n",
+            request=request,
+        ),
+    ]

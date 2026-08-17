@@ -16,7 +16,7 @@ from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
 from .happ_processor import HappProcessor
-from .processor import LIST_TIMEOUT, TemplateProcessor
+from .processor import LIST_TIMEOUT, ListFetchError, TemplateProcessor
 from .proxy_config import ProxyConfig
 
 # Configure logging
@@ -413,6 +413,19 @@ async def proxy_handler(request: Request, path: str):
     except HTTPException:
         # Re-raise HTTP exceptions (like 401 Authentication required)
         raise
+    except ListFetchError as e:
+        # A list that did not download must fail the request. Serving the
+        # config without it returns 200 with whole CIDR blocks missing, and the
+        # client happily overwrites its working subscription with that; an
+        # error leaves the last good config in place and pages monitoring.
+        # Same split as forward_request: timeout → 504, anything else → 502.
+        logger.error(
+            f"List fetch failed, refusing to serve a truncated config: {e.url}",
+            exc_info=True,
+        )
+        if e.is_timeout:
+            raise HTTPException(status_code=504, detail="Gateway Timeout") from e
+        raise HTTPException(status_code=502, detail="Bad Gateway") from e
     except Exception as e:
         logger.error(f"Worker error: {str(e)}")
         return Response(

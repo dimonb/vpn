@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 
-from src.processor import LIST_ATTEMPTS, NETSET_RE, RULE_RE, TemplateProcessor
+from src.processor import (
+    LIST_ATTEMPTS,
+    NETSET_RE,
+    RULE_RE,
+    ListFetchError,
+    TemplateProcessor,
+)
 
 
 class TestTemplateProcessor:
@@ -143,7 +149,7 @@ IP-CIDR,192.168.1.0/24,DIRECT
     async def test_expand_netset_failure(
         self, processor: TemplateProcessor, http_client: AsyncMock
     ) -> None:
-        """Test NETSET expansion failure."""
+        """A non-success status must fail the request, not shrink the config."""
         url = "https://example.com/netset.txt"
         suffix = ",PROXY"
 
@@ -152,10 +158,11 @@ IP-CIDR,192.168.1.0/24,DIRECT
         mock_response.status_code = 404
         http_client.get.return_value = mock_response
 
-        result = await processor.expand_netset(url, suffix)
+        with pytest.raises(ListFetchError) as exc_info:
+            await processor.expand_netset(url, suffix)
 
-        assert len(result) == 1
-        assert result[0] == f"# NETSET fetch failed: {url} (404)"
+        assert exc_info.value.url == url
+        assert not exc_info.value.is_timeout
 
     @pytest.mark.asyncio
     async def test_expand_netset_retries_transient_timeout(
@@ -182,16 +189,61 @@ IP-CIDR,192.168.1.0/24,DIRECT
     async def test_expand_netset_timeout_exhausts_attempts(
         self, processor: TemplateProcessor, http_client: AsyncMock
     ) -> None:
-        """A permanent timeout degrades gracefully after all attempts."""
+        """A permanent timeout raises after all attempts (no silent truncation)."""
         url = "https://example.com/netset.txt"
         suffix = ",PROXY"
 
         http_client.get.side_effect = httpx.ReadTimeout("timed out")
 
-        result = await processor.expand_netset(url, suffix)
+        with pytest.raises(ListFetchError) as exc_info:
+            await processor.expand_netset(url, suffix)
 
         assert http_client.get.call_count == LIST_ATTEMPTS
-        assert result == [f"# NETSET error: {url}"]
+        assert exc_info.value.url == url
+        assert exc_info.value.is_timeout
+
+    @pytest.mark.asyncio
+    async def test_expand_rule_set_propagates_list_failure(
+        self, processor: TemplateProcessor, http_client: AsyncMock
+    ) -> None:
+        """A failed NETSET inside a RULE-SET must not degrade to a comment."""
+        task = {"url": "https://example.com/rules.txt", "suffix": ",PROXY"}
+
+        rule_response = AsyncMock()
+        rule_response.text = "#NETSET https://example.com/netset.txt"
+        rule_response.raise_for_status = Mock()
+
+        netset_response = AsyncMock()
+        netset_response.is_success = False
+        netset_response.status_code = 500
+
+        http_client.get.side_effect = [rule_response, netset_response]
+
+        with pytest.raises(ListFetchError) as exc_info:
+            await processor.expand_rule_set(task, "example.com", {})
+
+        assert exc_info.value.url == "https://example.com/netset.txt"
+
+    @pytest.mark.asyncio
+    async def test_smart_fetch_non_success_raises(
+        self, processor: TemplateProcessor, http_client: AsyncMock
+    ) -> None:
+        """A non-success rule list response raises ListFetchError."""
+        url = "https://external.com/list.txt"
+
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = Mock(
+            side_effect=httpx.HTTPStatusError(
+                "503", request=Mock(), response=Mock(status_code=503)
+            )
+        )
+        http_client.get.return_value = mock_response
+
+        with pytest.raises(ListFetchError) as exc_info:
+            await processor.smart_fetch(url, "example.com", {})
+
+        assert exc_info.value.url == url
+        assert not exc_info.value.is_timeout
 
     @pytest.mark.asyncio
     async def test_expand_rule_set_with_netset(
