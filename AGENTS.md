@@ -57,6 +57,32 @@ make deploy                     [TEST_ONLY=<host>]     # personal: bare defaults
 - **Consequence:** any hand-edit made directly on a server is **overwritten on the next deploy**.
   Persistent changes must go into the templates and/or `config*.json`.
 
+### The deploy toolchain lives on the operator's laptop
+
+`ansible-playbook` runs **locally**, and as of 2026-08-17 there was **no ansible installed at all** —
+nothing in homebrew, pipx or `~/Library/Python` (most likely lost in the upgrade to Python 3.14).
+`make deploy` cannot run until it's reinstalled, and the error is a bare `command not found: ansible`,
+which is easy to misread as a PATH problem. What a working install needs:
+
+- **`ansible-core` *plus* the `ansible.posix` collection.** `deploy_vpn.yml` calls
+  `ansible.builtin.synchronize`, which actually lives in `ansible.posix`; with plain `ansible-core` the
+  playbook fails already at `--syntax-check`:
+  `couldn't resolve module/action 'ansible.builtin.synchronize'`.
+- **`passlib`**, and **`bcrypt` pinned `<4.1`.** `vpn/caddy.json.j2` renders
+  `metrics_pwd | password_hash('bcrypt')` and `METRICS_PWD` is longer than 72 bytes; bcrypt ≥ 4.1
+  *raises* `password cannot be longer than 72 bytes` instead of truncating, so the deploy dies on the
+  `caddy.json` item of the template loop.
+
+**That bcrypt failure is nastier than it looks.** The template task is a `loop`, and `sing-box.json` +
+`docker-compose.yml` are rendered onto the host **before** `caddy.json`, while `docker compose build` /
+`up` come **after** it. So the run aborts leaving **new config files on disk with the old containers
+still running** — not dangerous (rendered files are inert until the next `up`, see the safety window
+below), but nothing has taken effect and a half-applied deploy is easy to mistake for a successful one.
+Fix the pin and re-run.
+
+- **Never `ps aux` an in-flight `ansible-playbook`** — its `-e` arguments carry `SALT`, the reality
+  private keys and `METRICS_PWD` in plaintext in argv.
+
 ## Operating the deploy safely (don't shoot your own foot)
 
 The Makefile has **two knobs that must agree**: the *secrets/ports* (from `ENV_FILE`) and the
@@ -141,6 +167,87 @@ sing-box has **no on-failure DNS failover**; this destination-split is the robus
 `unexpected EOF` for `direct-out` lookups in the first ~70 s after a restart is a benign cold-start
 artifact (remote geoip/geosite rule-sets still downloading).
 
+## cfgapp's own egress on relays (origin fetches go through the tunnel)
+
+`cfgapp` is not just a config renderer — for every request it fetches the origin
+(`CONFIG_HOST`, e.g. `shadowrocket.ebac.dev`) twice: the bare path, then `<path>.tpl` when the
+first is a 404. The origin is a GitHub Pages site, and **GH Pages' anycast IPs are partially
+blocked from RU networks** (2026-08-17: only `185.199.110.153` of the four answered from both
+ru-0/Yandex and ru-2/kvmka; the other three had their SYN dropped). DNS round-robin then makes
+each fetch a coin flip and two fetches per request compound it — `~6%` success, which reads as a
+flapping host, not a blocked origin.
+
+So on relays cfgapp does **not** go out directly:
+
+- `sing-box.json.j2` adds a `mixed` inbound `cfgapp-in` on `172.29.77.1:1080`, password-protected
+  with `sha256("cfgapp-proxy." + SALT)`, plus a `route.rules` entry pinning that inbound to `auto`.
+- `docker-compose.yml.j2` creates a dedicated bridge `vpn-tunnel` with a **pinned** subnet
+  (`172.29.77.0/29`) so the gateway address sing-box binds is deterministic, attaches only
+  `cfgapp` to it, and sets `HTTP_PROXY`/`HTTPS_PROXY` to that inbound (httpx honours them via
+  `trust_env`). `NO_PROXY=localhost,127.0.0.1`.
+- Both are gated on `forward_group` — leaf/exit hosts render exactly as before, no inbound, no
+  network, no proxy env.
+
+This also fixes the rule-set/netset fetches the template processor makes (`raw.githubusercontent.com`
+is blocked from RU too). Verify with `docker logs vpn-sing-box-1 | grep cfgapp-in` — you should see
+`inbound/mixed[cfgapp-in] → outbound/hysteria2[<exit>]`.
+
+`forward_request` in `vpn/cfgapp/src/main.py` uses a **3 s** timeout with **3 attempts** (each a
+fresh connection, so a direct-route retry also re-resolves and lands on a different address).
+Don't raise it back to a single 30 s attempt: a stalled origin then holds the request past the
+monitoring timeout and the whole host looks down.
+
+## ghcr.io is unreachable from RU hosts (docker pulls go through the tunnel)
+
+**ghcr.io is blocked from Russian networks.** Only the `xray` image comes from there (the rest are
+Docker Hub, which is reachable), and going direct the deploy's last task —
+`docker compose up --pull always …` — cannot succeed on a RU host:
+
+```
+Error response from daemon: Head "https://ghcr.io/v2/xtls/xray-core/manifests/26.2.6": EOF
+```
+
+(also seen as `… TLS handshake timeout`.) 2026-08-17: it hit `ru-2.kvmki.v.dimonb.com` on every
+deploy; `ru-0.yandex.v.dimonb.com` only got through because it had the manifest cached.
+
+**Fix (2026-08-17): on relays the docker daemon's registry traffic goes through the relay's own
+tunnel**, reusing the inbound cfgapp already uses. `--pull always` stays. `deploy_vpn.yml` renders
+`vpn/docker-http-proxy.conf.j2` → `/etc/systemd/system/docker.service.d/http-proxy.conf` (mode
+`0600`, root — it carries the proxy password), setting `HTTP_PROXY`/`HTTPS_PROXY` to
+`http://cfgapp:<sha256("cfgapp-proxy."+SALT)>@172.29.77.1:1080`, i.e. the `mixed` inbound
+`cfgapp-in` that a `route.rules` entry pins to `auto` (hysteria2 → EU exit). `NO_PROXY` keeps
+loopback, this host's own names/IP and all RFC1918 + link-local direct (docker bridges incl.
+`vpn-tunnel`, the LAN, cloud metadata `169.254.169.254`).
+
+- **Relay-gated exactly like the templates** (`proxy.<ansible_host>.features.forward-nonru` present
+  *and* its subs group exists — the same `lookup('file', config_file) | from_json` dance as
+  `docker-compose.yml.j2`). Leaf/exit hosts have working direct egress: the drop-in is **removed**
+  there, never installed.
+- dockerd reads its proxy from the environment **at start**, so the play does `daemon-reload` +
+  `systemctl restart docker` — **only when the drop-in actually changed** (registered result, not a
+  blind restart). That restart bounces *every* container on the box, VPN and non-VPN alike (on ru-0
+  that's `freeswitch`, `shadowbox`, `watchtower` too), which is why it must stay change-gated. The
+  play then `wait_for`s `172.29.77.1:1080` before continuing, so the proxy is listening again after
+  the bounce.
+- **Ordering matters and is deliberate**: the drop-in tasks sit *after* the template render loop and
+  *before* `docker compose build` / `up --pull always`, so the proxy is in effect for the pull.
+- Pulls now cross a DPI-ridden tunnel, and compose aborts the *whole* pull on the first error — e.g.
+  `remote error: … lookup auth.docker.io: unexpected EOF`, the exit's DNS hiccuping (seen once on
+  ru-2, right after the docker restart; the very same pull succeeded on retry). So `Run Docker
+  Compose` now has `until rc == 0` / `retries: 2` / `delay: 20`.
+- Verify: `systemctl show docker --property=Environment` shows the proxy, and
+  `docker logs vpn-sing-box-1 | grep ghcr.io` shows
+  `inbound/mixed[cfgapp-in] … outbound/hysteria2[<exit>]` — i.e. the pull left via the tunnel.
+
+**Consequences worth remembering:**
+- A pull on a RU host now **depends on the tunnel being up**. If `auto` is dead, pulls fail again
+  (and `docker compose build` can't fetch base images either) — fix the tunnel first.
+- Still **never run `docker system prune` / `docker image prune -a` on a RU host.** An evicted image
+  is only re-pullable while the tunnel works, and the stack needs those images to start at all.
+
+Same family of problem as GH Pages / `raw.githubusercontent.com` being partly blocked from RU — see
+[cfgapp's own egress on relays](#cfgapps-own-egress-on-relays-origin-fetches-go-through-the-tunnel).
+
 ## Per-site routing (send a domain direct / to a specific exit)
 
 Single source of truth is the inline `domain-ru` rule_set — both the DNS rule
@@ -189,7 +296,8 @@ on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless out
 - **Mainline sing-box (`itdoginfo/sing-box:v1.12.12`) has no `tls_fragment`** — that field is rejected.
 - Validate a rendered config with sing-box's own checker (needs the cert mounted):
   `docker run --rm --entrypoint sing-box -v /path/sing-box.json:/c.json -v /path/cert:/etc/xray/certs itdoginfo/sing-box:v1.12.12 check -c /c.json`
-- The `error reading bcrypt version` traceback during `make deploy` (passlib/bcrypt on macOS) is **non-fatal** — the caddy template still renders.
+- The `error reading bcrypt version` traceback during `make deploy` (passlib/bcrypt on macOS) is **non-fatal** — the caddy template still renders. A *fatal* `password cannot be longer than 72 bytes` from the same area means bcrypt ≥ 4.1 — see [The deploy toolchain lives on the operator's laptop](#the-deploy-toolchain-lives-on-the-operators-laptop).
+- **Never `docker system prune` / `docker image prune -a` on a RU host** — ghcr.io is blocked from RU, so an evicted image is only re-pullable while the relay tunnel is up: [ghcr.io is unreachable from RU hosts](#ghcrio-is-unreachable-from-ru-hosts-docker-pulls-go-through-the-tunnel).
 
 ## Common tasks → runbooks
 
