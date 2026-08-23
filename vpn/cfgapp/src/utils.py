@@ -9,7 +9,6 @@ large lists of CIDR blocks while maintaining full coverage.
 
 import ipaddress
 import re
-from typing import Optional
 
 # Regular expressions for IP validation and parsing
 RE_IPV4_CIDR = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}\/(?:[0-9]|[12][0-9]|3[0-2])$")
@@ -295,7 +294,7 @@ class NetworkCompactor:
     def find_minimal_supernet(
         nets: list[ipaddress.IPv4Network | ipaddress.IPv6Network],
         min_prefix: int = 8,
-    ) -> Optional[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    ) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
         """Find the minimal supernet that covers all networks in the list.
 
         Args:
@@ -369,8 +368,6 @@ class NetworkCompactor:
             nets = [ipaddress.IPv4Network(c) for c in cidrs]
         else:
             nets = [ipaddress.IPv6Network(c) for c in cidrs]
-
-        original_coverage = sum(net.num_addresses for net in nets)
 
         # Basic collapse to remove overlaps
         nets = list(ipaddress.collapse_addresses(nets))

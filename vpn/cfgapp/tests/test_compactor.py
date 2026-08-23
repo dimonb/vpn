@@ -1,11 +1,12 @@
 """Tests for NetworkCompactor class and IPProcessor integration."""
 
 import ipaddress
+
 import pytest
 
 from src.utils import (
-    NetworkCompactor,
     IPProcessor,
+    NetworkCompactor,
     compact_ipv4_networks,
     compact_ipv6_networks,
 )
@@ -104,9 +105,7 @@ class TestNetworkCompactor:
         """Test coverage verification with full coverage."""
         original = ["192.168.0.0/24", "192.168.1.0/24"]
         compacted = [ipaddress.IPv4Network("192.168.0.0/23")]
-        is_covered, not_covered = NetworkCompactor.verify_coverage(
-            original, compacted
-        )
+        is_covered, not_covered = NetworkCompactor.verify_coverage(original, compacted)
         assert is_covered
         assert not_covered == []
 
@@ -114,9 +113,7 @@ class TestNetworkCompactor:
         """Test coverage verification with missing networks."""
         original = ["192.168.0.0/24", "192.168.1.0/24", "10.0.0.0/8"]
         compacted = [ipaddress.IPv4Network("192.168.0.0/23")]
-        is_covered, not_covered = NetworkCompactor.verify_coverage(
-            original, compacted
-        )
+        is_covered, not_covered = NetworkCompactor.verify_coverage(original, compacted)
         assert not is_covered
         assert "10.0.0.0/8" in not_covered
 

@@ -68,14 +68,18 @@ def test_replace_proxy_list_substitutes_urls(
     template_processor: TemplateProcessor, proxy_config: ProxyConfig
 ) -> None:
     happ = HappProcessor(template_processor, proxy_config)
-    out = happ.replace_proxy_list(HAPP_TPL, request_headers={"x-query-string": "u=dimonb"})
+    out = happ.replace_proxy_list(
+        HAPP_TPL, request_headers={"x-query-string": "u=dimonb"}
+    )
 
     # PROXY_LIST line is gone
     assert "PROXY_LIST" not in out
     # Should contain proxy URLs (3 proxies in default sub)
     lines = [line for line in out.split("\n") if line.strip()]
     proxy_url_lines = [
-        line for line in lines if line.startswith(("vless://", "hysteria2://", "vmess://"))
+        line
+        for line in lines
+        if line.startswith(("vless://", "hysteria2://", "vmess://"))
     ]
     assert len(proxy_url_lines) == 3
     # Static template lines preserved
@@ -87,7 +91,9 @@ def test_vless_url_happ_format(
     template_processor: TemplateProcessor, proxy_config: ProxyConfig
 ) -> None:
     happ = HappProcessor(template_processor, proxy_config)
-    out = happ.replace_proxy_list(HAPP_TPL, request_headers={"x-query-string": "u=dimonb"})
+    out = happ.replace_proxy_list(
+        HAPP_TPL, request_headers={"x-query-string": "u=dimonb"}
+    )
 
     vless_lines = [line for line in out.split("\n") if line.startswith("vless://")]
     assert vless_lines, "expected at least one vless URL"
@@ -113,7 +119,9 @@ def test_vless_url_happ_format(
     assert sample.split("#", 1)[1]
 
 
-def test_replace_proxy_list_no_proxy_config(template_processor: TemplateProcessor) -> None:
+def test_replace_proxy_list_no_proxy_config(
+    template_processor: TemplateProcessor,
+) -> None:
     happ = HappProcessor(template_processor, proxy_config=None)
     out = happ.replace_proxy_list(HAPP_TPL, request_headers={})
     assert "PROXY_LIST" in out

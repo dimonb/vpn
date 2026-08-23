@@ -170,10 +170,14 @@ async def forward_request(request: Request, path_with_search: str) -> httpx.Resp
             raise HTTPException(status_code=500, detail="Internal Server Error") from e
 
     if isinstance(last_error, httpx.TimeoutException):
-        logger.error(f"Timeout error to origin after {ORIGIN_ATTEMPTS} attempts: {last_error}")
+        logger.error(
+            f"Timeout error to origin after {ORIGIN_ATTEMPTS} attempts: {last_error}"
+        )
         raise HTTPException(status_code=504, detail="Gateway Timeout") from last_error
 
-    logger.error(f"Connection error to origin after {ORIGIN_ATTEMPTS} attempts: {last_error}")
+    logger.error(
+        f"Connection error to origin after {ORIGIN_ATTEMPTS} attempts: {last_error}"
+    )
     raise HTTPException(status_code=502, detail="Bad Gateway") from last_error
 
 

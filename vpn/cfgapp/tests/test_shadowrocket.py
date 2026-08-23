@@ -252,8 +252,6 @@ class TestShadowRocketSubscription:
         assert query_params["pbk"] == ["test-public-key"]
         assert query_params["sid"] == ["test-short-id"]
 
-
-
     @patch("src.proxy_config.settings")
     def test_generate_shadowrocket_subscription_v2(
         self, mock_settings, config_file: Path

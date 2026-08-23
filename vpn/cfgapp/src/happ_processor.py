@@ -20,7 +20,9 @@ class HappProcessor:
         self.template_processor = template_processor
         self.proxy_config = proxy_config
 
-    def _extract_query_params(self, request_headers: dict) -> tuple[str | None, str | None, str | None]:
+    def _extract_query_params(
+        self, request_headers: dict
+    ) -> tuple[str | None, str | None, str | None]:
         sub_name = password = user = None
         query_string = request_headers.get("x-query-string")
         if query_string:

@@ -359,8 +359,6 @@ class TestProxyConfig:
         assert config["reality-opts"]["public-key"] == "test-public-key"
         assert config["reality-opts"]["short-id"] == "test-short-id"
 
-
-
     def test_get_proxy_list_default(self, config_file: Path) -> None:
         """Test getting proxy list for default subscription."""
         proxy_config = ProxyConfig(str(config_file))
