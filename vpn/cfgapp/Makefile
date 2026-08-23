@@ -1,4 +1,4 @@
-.PHONY: help build run stop clean test docker-test dev install lint format
+.PHONY: help build run stop clean test docker-test dev install lint format format-check
 
 # Default target
 help:
@@ -13,6 +13,7 @@ help:
 	@echo "  install      - Install dependencies"
 	@echo "  lint         - Run linter"
 	@echo "  format       - Format code"
+	@echo "  format-check - Check formatting without writing (CI gate)"
 
 # Docker commands
 build:
@@ -43,6 +44,10 @@ lint:
 
 format:
 	poetry run ruff format src/ tests/
+
+# Same as `format` but only reports — this is what CI gates on.
+format-check:
+	poetry run ruff format --check src/ tests/
 
 # Docker testing
 docker-test:

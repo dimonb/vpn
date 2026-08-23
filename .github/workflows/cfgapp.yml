@@ -1,0 +1,48 @@
+name: cfgapp
+
+# Only cfgapp has a test suite and a ruff config; the ansible/template side of the
+# repo needs live inventory + secrets, so it is not covered here.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'vpn/cfgapp/**'
+      - '.github/workflows/cfgapp.yml'
+  pull_request:
+    paths:
+      - 'vpn/cfgapp/**'
+      - '.github/workflows/cfgapp.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: vpn/cfgapp
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Poetry has to exist before setup-python, which reads poetry.lock for its cache key.
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: poetry
+          cache-dependency-path: vpn/cfgapp/poetry.lock
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      # The same targets used locally, so CI can't drift from `make check`.
+      - name: Lint
+        run: make lint
+
+      - name: Format check
+        run: make format-check
+
+      - name: Tests
+        run: make test
