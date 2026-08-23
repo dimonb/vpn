@@ -82,6 +82,19 @@ still running** — not dangerous (rendered files are inert until the next `up`,
 below), but nothing has taken effect and a half-applied deploy is easy to mistake for a successful one.
 Fix the pin and re-run.
 
+As of 2026-08-23 the toolchain is reinstalled into a **repo-local venv, `./.venv-ansible`**
+(gitignored), and deploys run with it on PATH:
+
+```bash
+python3 -m venv .venv-ansible
+.venv-ansible/bin/pip install ansible-core 'bcrypt<4.1' passlib jinja2
+export PATH="$PWD/.venv-ansible/bin:$PATH"
+ansible-galaxy collection install ansible.posix      # then: make deploy …
+```
+
+Note `ansible-core` 2.21 no longer redirects `ansible.builtin.synchronize` to its `ansible.posix`
+home on its own; the collection install above is what makes `deploy_vpn.yml` resolve at all.
+
 - **Never `ps aux` an in-flight `ansible-playbook`** — its `-e` arguments carry `SALT`, the reality
   private keys and `METRICS_PWD` in plaintext in argv.
 
@@ -151,19 +164,28 @@ So "change a relay's upstream transport" = **edit `protocol` in `config*.json`**
 ## DNS resolution on relays (aligned with routing)
 
 Relays resolve DNS the same way they route traffic, so direct-routed names keep working when the
-tunnel is down and the DPI can't poison lookups (`vpn/sing-box.json.j2`, all relay-gated on
-`forward_group`):
+tunnel is down and the DPI can't poison lookups (`vpn/sing-box.json.j2`, all relay-gated on the
+`relay` flag). The split is **traffic vs. dialing**, not per-destination:
 
-- **tunnel-routed traffic → resolve through the tunnel.** `route.default_domain_resolver` = `quad9-doh`
-  (a DoH server with `detour: "auto"`). Foreign domains resolve unpoisoned at the exit → correct IPs →
-  route to the tunnel. (Plaintext 9.9.9.9 from Russia is DPI-disrupted; without this, foreign domains
-  got mis-resolved and misrouted to `direct-out`, failing with `unexpected EOF`.)
-- **direct-routed traffic → resolve locally.** `direct-out` and the `domain-ru` DNS rule use `local-dns`
-  (`type: local`, the box's system resolver) — RU/direct traffic resolves from the RU perspective and
-  works even if the tunnel is down.
-- **exit server addresses → resolve directly.** Each exit outbound sets `domain_resolver: "bootstrap"`
-  (udp 9.9.9.9). This prevents the "resolve the tunnel through the tunnel" deadlock — exit domains
-  always resolve without the tunnel, so it can always come up.
+- **traffic → resolve through the tunnel.** The `dns.rules` fall through to `quad9-doh` (a DoH
+  server with `detour: "auto"`) and `final` is `quad9-doh`. Destination domains resolve unpoisoned
+  at the exit → correct IPs → route to the tunnel. (Plaintext 9.9.9.9 from Russia is DPI-disrupted;
+  without this, foreign domains got mis-resolved and misrouted to `direct-out`, failing with
+  `unexpected EOF`.) RU traffic is the exception: the `domain-ru` DNS rule uses `local-dns`, so it
+  resolves from the RU perspective and works with a dead tunnel.
+- **dialing → resolve locally, never through the tunnel.** `route.default_domain_resolver`, every
+  exit outbound's `domain_resolver`, `quad9-doh.domain_resolver` and `direct-out` all use
+  `local-dns` (`type: local`, the box's system resolver). Anything needed to *bring the tunnel up*
+  — the exit's own hostname, the DoH server's hostname — plus the vless inbound's REALITY
+  handshake dest must not depend on the tunnel, or the relay deadlocks: with
+  `default_domain_resolver: quad9-doh` a dead tunnel also killed `lookup ok.ru` and the relay
+  stopped accepting clients entirely (outage 2026-08-17..23, see
+  [`doc/RUNBOOK_dpi_failover.md`](doc/RUNBOOK_dpi_failover.md)). Plaintext `9.9.9.9` is no longer
+  used for this either — it is blocked outright on kvmka since 2026-08-17.
+- **`local-dns` is poisoned on RU relays** (kvmka answers `linkedin/meduza/torproject/facebook`
+  with `77.94.164.71`). Harmless while it is dial-only, but it makes DNS changes here easy to get
+  wrong: after touching this, fetch a poisoned domain **through** the relay and confirm real
+  content rather than a 200-with-block-page.
 
 sing-box has **no on-failure DNS failover**; this destination-split is the robust equivalent.
 `unexpected EOF` for `direct-out` lookups in the first ~70 s after a restart is a benign cold-start
@@ -409,8 +431,9 @@ client ──UDP HYSTERIA2_PORT──▶ sing-box hysteria2-in (salamander obfs)
 
 on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless outbound ─▶ EXIT node ─▶ internet
             (geoip-ru / domain-ru / private IPs ─▶ direct-out)
-            (DNS on relays is split like routing: tunnel-routed → DoH-via-tunnel, direct-routed →
-             local resolver, exit addresses → direct 9.9.9.9 — see "DNS resolution on relays")
+            (DNS on relays is split traffic-vs-dialing: destination lookups → DoH via the tunnel
+             (RU domains → local), dialing/REALITY dest → local resolver — see "DNS resolution on
+             relays")
 ```
 
 ## Gotchas

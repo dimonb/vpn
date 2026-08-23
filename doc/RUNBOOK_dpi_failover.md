@@ -83,15 +83,20 @@ the non-working ones. The relay group is `config.proxy[<relay>].features.forward
 ```
 
 **b) `vpn/sing-box.json.j2`** — DNS on relays is **aligned with routing** (already in the template;
-keep it). All relay-gated on `forward_group`:
-- `route.default_domain_resolver` = **`quad9-doh`** (DoH with `detour:"auto"`) → tunnel-routed names
-  resolve **through the tunnel**, unpoisoned. (Was `bootstrap`; plaintext 9.9.9.9 from RU is DPI-
-  disrupted, which mis-resolved foreign domains and misrouted them to `direct-out` → floods of
-  `open connection to <domain>… using outbound/direct[direct-out]: lookup …: unexpected EOF`.)
-- each exit outbound has **`domain_resolver:"bootstrap"`** (udp 9.9.9.9) → exit **server addresses**
-  resolve directly so the tunnel always comes up (no "resolve the tunnel through the tunnel" deadlock).
-- `direct-out` and the `domain-ru` DNS rule use **`local-dns`** (`type:local`) → direct-routed names
-  resolve from the RU perspective, work even if the tunnel is down.
+keep it). All relay-gated on the `relay` flag:
+- **dial-time** resolution — `route.default_domain_resolver`, every exit outbound's
+  `domain_resolver`, `quad9-doh.domain_resolver`, and `direct-out` — is **`local-dns`**
+  (`type:local`, the host resolver). Nothing needed to *bring the tunnel up* may depend on the
+  tunnel or on plaintext 9.9.9.9 (see the 2026-08-17 outage below).
+- **traffic** resolution still goes through the tunnel: the `dns.rules` fall through to
+  `quad9-doh` (DoH, `detour:"auto"`) and `final` is `quad9-doh`, so destination domains resolve
+  unpoisoned at the exit. The `domain-ru` DNS rule stays on `local-dns` (RU perspective, works
+  with a dead tunnel).
+- local DNS on RU relays **is poisoned** (on kvmka `linkedin/meduza/torproject/facebook` →
+  `77.94.164.71`). That is fine as long as it is only used for dialing — verify after any DNS
+  change by fetching a poisoned domain through the relay and checking for real content, not a
+  200-with-block-page (`grep -iE 'ограничен|роскомнадзор'`).
+
 See AGENTS.md → "DNS resolution on relays". No change needed unless you touch DNS.
 
 ## 4. Validate, deploy to the relay only, verify
@@ -103,10 +108,10 @@ make deploy ENV_FILE=$ENVF CONFIG_FILE=$CFG SERVERS_FILE=$SRV TEST_ONLY=<relay>
 ```
 
 Expected end state on the relay's rendered `sing-box.json`: outbounds are `hysteria2` to the exits,
-`auto` (and `auto-il`) list only working exits, `quad9-doh.detour == "auto"`,
-`route.default_domain_resolver == {"server":"quad9-doh"}`, each exit outbound has
-`domain_resolver == "bootstrap"`, and `direct-out.domain_resolver == "local-dns"`. Logs (past the
-first ~70 s of startup): **0** urltest/reality/dns EOF and no steady-state `direct-out` lookup EOF.
+`auto` (and `auto-il`) list only working exits, `quad9-doh.detour == "auto"`, and every dial-time
+resolver (`route.default_domain_resolver`, each exit outbound's `domain_resolver`,
+`quad9-doh.domain_resolver`, `direct-out.domain_resolver`) is `local-dns`. Logs (past the first
+~70 s of startup): **0** urltest/reality/dns EOF and no steady-state `direct-out` lookup EOF.
 
 ## Notes & escalation
 
@@ -114,10 +119,50 @@ first ~70 s of startup): **0** urltest/reality/dns EOF and no steady-state `dire
   (domestic RU→RU) is unaffected, which is why the relay itself still accepts clients.
 - If a candidate exit fails Hysteria2 too, likely causes: no `hysteria2-in` deployed there
   (redeploy that host), wrong port for its profile, UDP to that IP also filtered.
-- **If TSPU starts dropping QUIC/UDP as well:** options are rotating the exit's IP, or adding a
-  desync layer (zapret / byedpi / GoodbyeDPI-style) on the relay. Neither is wired up here yet.
+- **If TSPU starts dropping QUIC/UDP as well:** it already does, per-network and per-destination —
+  see the 2026-08-17 incident below. First response is to re-run §2 against *every* candidate exit
+  and keep only the ones that answer; only if none do, rotate the exit's IP or add a desync layer
+  (zapret / byedpi / GoodbyeDPI-style) on the relay. Neither desync option is wired up here yet.
 - **Per-site quirks** (a Russian site that's slow through the tunnel, or a censored site that must
   bypass the DPI): see AGENTS.md → "Per-site routing". RU-IP sites go in the `domain-ru` rule_set
   (direct + local resolve); censored + Cloudflare-fronted sites are pinned to an exit.
-- Last applied: 2026-07-03 — ebac `ru-1` → fr-2/de-2/**am-1**/il-1; dimonb `ru-2` → ie-0. DNS
-  aligned with routing on both relays; `fanfics.me`→direct, `ficbook.net`→am-1 (ebac).
+- Last applied: 2026-08-23 — see the incident below. ebac `ru-1` → **am-1 only**; dimonb `ru-2` →
+  **ru-0** (Yandex) → ie-0; dimonb `ru-0` → ie-0 (unaffected). `fanfics.me`→direct,
+  `ficbook.net`→am-1 (ebac).
+- Previously: 2026-07-03 — ebac `ru-1` → fr-2/de-2/am-1/il-1; dimonb `ru-2` → ie-0.
+
+## Incident 2026-08-17/19 — Hysteria2 blocked to AWS, and a DNS deadlock on top
+
+**What happened.** On the kvmka network (AS212165: ebac `ru-1`, dimonb `ru-2`) Hysteria2/QUIC to
+**every AWS exit** (fr-2, de-2, ie-1, il-1, us-1, ie-0) stopped establishing — the QUIC handshake is
+dropped while *plain* UDP to the same ip:port still arrives (verify with tcpdump on the exit).
+Non-AWS exits were unaffected: **am-1** (Armenia, 178.160.230.38) and RU-domestic `ru-0` (Yandex)
+both worked. `ru-0` itself still reached AWS fine, so the block is per-source-network.
+
+**Why clients could not even connect.** DNS was chained to the tunnel: `quad9-doh` rode
+`detour:"auto"`, and `route.default_domain_resolver` pointed at it. With the tunnel dead, resolving
+anything died — including the vless inbound's own REALITY handshake dest:
+
+```
+ERROR inbound/vless[vless-in]: TLS handshake: REALITY: failed to dial dest:
+      lookup ok.ru: context deadline exceeded          # ~1000/hour on ru-1
+```
+
+So the relay stopped accepting clients at all, not just non-RU traffic. On `ru-2` plaintext
+`9.9.9.9:53/udp` was blocked too, which killed the `bootstrap` resolver the exit outbounds used.
+
+**Fix applied.** Working exits only (`ebac_forward` → am-1; dimonb `ru-2` → new `forward-via-ru0`
+group so it hops through `ru-0`, which still reaches ie-0 — note `forward-nonru` is shared with
+`ru-0` itself, so a separate group is required to avoid a self-loop), `forward-il` dropped from
+`ru-1` (no live IL upstream; `.il` falls back to `direct-out`), plus all **dial-time** resolvers
+moved to `local-dns` (§3b) so a dead tunnel can never again take the inbound down with it.
+
+**Deploy gotcha.** A relay whose tunnel is down cannot pull/build from Docker Hub (the docker proxy
+drop-in points into the dead tunnel), so `make deploy` fails at *Build docker-compose apps* after
+having already written the new configs. Recover by restarting sing-box alone with the new config,
+then re-running the deploy:
+
+```bash
+ssh <relay> 'cd /root/vpn && docker compose restart sing-box'   # tunnel comes up
+make deploy ENV_FILE=$ENVF CONFIG_FILE=$CFG SERVERS_FILE=$SRV TEST_ONLY=<relay>
+```
