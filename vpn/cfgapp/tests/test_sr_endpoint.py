@@ -141,7 +141,10 @@ class TestSREndpoint:
         response = client.get("/sr")
 
         assert response.status_code == 401
-        assert response.json()["detail"] == "Authentication required"
+        # Errors come back as text/plain, not FastAPI's JSON envelope: VPN clients
+        # display the body verbatim (see the handlers in src/main.py).
+        assert response.headers["content-type"].startswith("text/plain")
+        assert response.text == "Authentication required"
 
     @patch("src.main.proxy_config")
     @patch("src.config.settings")
@@ -176,7 +179,8 @@ class TestSREndpoint:
         response = client.get(f"/sr?u={username}&hash={expected_hash}")
 
         assert response.status_code == 401
-        assert response.json()["detail"] == "Authentication required"
+        assert response.headers["content-type"].startswith("text/plain")
+        assert response.text == "Authentication required"
 
     def test_sr_endpoint_no_proxy_config(self) -> None:
         """Test /sr endpoint when proxy config is not available."""
@@ -191,4 +195,5 @@ class TestSREndpoint:
         response = client.get("/sr?u=test&hash=test")
 
         assert response.status_code == 500
-        assert response.json()["detail"] == "Proxy configuration not available"
+        assert response.headers["content-type"].startswith("text/plain")
+        assert response.text == "Proxy configuration not available"

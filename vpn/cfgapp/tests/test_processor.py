@@ -1,5 +1,6 @@
 """Tests for template processor."""
 
+import ipaddress
 from unittest.mock import AsyncMock, Mock
 
 import httpx
@@ -110,10 +111,17 @@ IP-CIDR,192.168.1.0/24,DIRECT
 
     @pytest.mark.asyncio
     async def test_smart_fetch_same_host(
-        self, processor: TemplateProcessor, http_client: AsyncMock
+        self,
+        processor: TemplateProcessor,
+        http_client: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Test smart fetch for same host (should proxy via API_HOST)."""
         from src.config import settings
+
+        # The proxy-via-origin branch is gated on API_HOST being set; it defaults to
+        # "" so without this the call silently falls through to a direct fetch.
+        monkeypatch.setattr(settings, "api_host", "origin.example.com")
 
         url = "https://example.com/path"
         incoming_host = "example.com"
@@ -151,9 +159,20 @@ IP-CIDR,192.168.1.0/24,DIRECT
 
         result = await processor.expand_netset(url, suffix)
 
+        # Compaction is on by default, so don't assert a literal block list: the /8
+        # is kept as a /8 rather than expanded into 1024 /18s. What must hold is
+        # that every input range is still fully covered.
         assert len(result) > 0
-        assert any("IP-CIDR,192.168.0.0/18" in line for line in result)
-        assert any("IP-CIDR,10.0.0.0/18" in line for line in result)
+        assert all(
+            line.startswith("IP-CIDR,") and line.endswith(suffix) for line in result
+        )
+        covered = [
+            ipaddress.ip_network(line[len("IP-CIDR,") : -len(suffix)])
+            for line in result
+        ]
+        for source in ("192.168.1.0/24", "10.0.0.0/8"):
+            net = ipaddress.ip_network(source)
+            assert any(net.subnet_of(block) for block in covered), source
 
     @pytest.mark.asyncio
     async def test_expand_netset_failure(
