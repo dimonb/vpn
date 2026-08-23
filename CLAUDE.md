@@ -10,6 +10,12 @@ This is a VPN deployment project with:
 - **Python cfgapp** for proxy configuration management
 - **NetworkCompactor** for IP range optimization
 
+## Read First (operational knowledge)
+
+- `AGENTS.md` — traffic path, DNS model on relays, secrets/ports, gotchas. **Read before touching deploy, sing-box, or DNS.**
+- `doc/RUNBOOK_deploy.md` — deploy / validate / render / add-remove user
+- `doc/RUNBOOK_dpi_failover.md` — "VPN dead from Russia" (DPI/TSPU) → exit failover; includes the throwaway-client test recipe
+
 ## Project Structure
 
 ```
@@ -87,17 +93,18 @@ python compact_networks.py input.txt output.txt \
 
 ### 5. Ansible & Deployment
 
-**Before running Ansible:**
-- Ensure `.env` file is configured
-- Check inventory in `hosts.yml` or `hosts`
-- Test connection: `ansible all -m ping`
-
-**Common Make targets:**
+**Ansible is not on PATH** — it lives in a repo-local venv:
 ```bash
-make install-docker    # Install Docker on remote hosts
-make deploy           # Deploy VPN services
-make logs             # View service logs
+export PATH="$PWD/.venv-ansible/bin:$PATH"   # ansible-core + ansible.posix + bcrypt<4.1
 ```
+
+**Inventory is `servers.cfg` (dimonb) / `servers.ebac.cfg` (ebac)** — there is no `hosts.yml`.
+Always pass a full profile triple, and `TEST_ONLY` to limit to one host:
+```bash
+make install-docker                          # install Docker on remote hosts
+make deploy ENV_FILE=.env.ebac CONFIG_FILE=config.ebac.json SERVERS_FILE=servers.ebac.cfg TEST_ONLY=ru-1
+```
+No `make logs` target — read logs over ssh (`docker logs --since 10m vpn-sing-box-1`; `ubuntu@`+`sudo` on ebac hosts except am-1).
 
 ### 6. Code Style
 
@@ -203,12 +210,22 @@ Examples:
 - Check `.env` configuration
 - Review playbook syntax: `ansible-playbook --syntax-check playbook.yml`
 
+### 12. Gotchas That Cost Time
+
+- `.env*`, `config.json`, `config.ebac.json`, `servers*.cfg` are **gitignored local secrets** — edits there never appear in `git status`/`git diff`.
+- Clients enter on **:443** (caddy layer4 routes by TLS SNI → sing-box vless-in :8443, xray :28443). Port 8443 is not reachable externally — end-to-end tests must target :443.
+- Validate a rendered template without deploying: `ansible <host> -i <inv> -e "salt=…" -m debug -a 'msg={{ lookup("template","vpn/sing-box.json.j2") }}'`
+- A relay whose tunnel is down cannot pull from Docker Hub, so `make deploy` fails at *Build docker-compose apps* **after** writing new configs — `docker compose restart sing-box` on the relay, then re-run the deploy.
+
 ## Additional Resources
 
 - **Main README**: [README.md](README.md)
+- **Operations**: [AGENTS.md](AGENTS.md)
+- **Deploy runbook**: [doc/RUNBOOK_deploy.md](doc/RUNBOOK_deploy.md)
+- **DPI failover runbook**: [doc/RUNBOOK_dpi_failover.md](doc/RUNBOOK_dpi_failover.md)
 - **NetworkCompactor API**: [doc/README_COMPACTOR.md](doc/README_COMPACTOR.md)
 - **Integration Guide**: [doc/INTEGRATION_SUMMARY.md](doc/INTEGRATION_SUMMARY.md)
-- **Reality Setup**: [REALITY_SETUP.md](REALITY_SETUP.md)
+- **Reality Setup**: [doc/REALITY_SETUP.md](doc/REALITY_SETUP.md)
 
 ## Quick Reference
 
@@ -221,8 +238,8 @@ Examples:
 - Archives: `_archive_*/` (can be deleted)
 
 ### Environment
-- Python venv: `vpn/cfgapp/.venv/`
-- Ansible: System-wide or in separate venv
+- Python venv (cfgapp): `vpn/cfgapp/.venv/`
+- Ansible venv: `./.venv-ansible/` (not on PATH by default)
 - Make: System-wide
 
 ### Priority Files
@@ -233,5 +250,5 @@ Examples:
 
 ---
 
-**Last Updated**: December 9, 2024
-**Project Status**: Active, NetworkCompactor integrated and tested ✅
+**Last Updated**: August 24, 2026
+**Project Status**: Active
