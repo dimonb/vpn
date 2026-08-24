@@ -135,6 +135,14 @@ No `make logs` target — read logs over ssh (`docker logs --since 10m vpn-sing-
 - `doc/INTEGRATION_SUMMARY.md` - Integration notes
 - Inline docstrings in Python code
 
+**This repo is public — split what you write.** Anything committed here (docs, examples, test
+fixtures, template defaults) must make sense to a stranger: commands, failure modes, config
+semantics, with roles and placeholders (`example.net`, `<profile>`, `<exit host>`) instead of real
+names. Concrete infrastructure — host names, providers, regions, IPs, profile suffixes, credential
+paths, per-site routing preferences — belongs in the gitignored `.claude.local.md`, with only a
+pointer left here. If a template or code default needs an operator-specific value, make it
+config/env-driven with an empty default rather than baking the value in.
+
 ### 8. Git & Commits
 
 **Commit message format:**
