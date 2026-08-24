@@ -100,7 +100,7 @@ class TestMainApp:
         mock_process.side_effect = ListFetchError(url, httpx.ReadTimeout("timed out"))
 
         client = TestClient(app)
-        response = client.get("/contabo.conf")
+        response = client.get("/example.conf")
 
         assert response.status_code == 504
         assert "IP-CIDR" not in response.text
@@ -118,7 +118,7 @@ class TestMainApp:
         mock_process.side_effect = ListFetchError(url, "HTTP 503")
 
         client = TestClient(app)
-        response = client.get("/contabo.conf")
+        response = client.get("/example.conf")
 
         assert response.status_code == 502
         assert "IP-CIDR" not in response.text
@@ -128,7 +128,7 @@ def _origin_404_then_template() -> list:
     """Origin 404 for the bare path, then a template with one RULE-SET."""
     import httpx
 
-    request = httpx.Request("GET", "https://example.com/contabo.conf")
+    request = httpx.Request("GET", "https://example.com/example.conf")
     return [
         httpx.Response(status_code=404, content=b"", request=request),
         httpx.Response(

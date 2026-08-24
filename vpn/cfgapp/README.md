@@ -19,8 +19,8 @@ Create a `.env` file based on `env.example`:
 
 ```bash
 # API Configuration
-CONFIG_HOST=shadowrocket.ebac.dev
-API_HOST=shadowrocket.ebac.dev
+CONFIG_HOST=subs.example.net
+API_HOST=subs.example.net
 
 # Authentication
 SALT=your-secret-salt-here
@@ -57,11 +57,11 @@ The `PROXY_CONFIG` environment variable should point to a JSON file with the fol
   ],
   "subs": {
     "default": {
-      "DE_1_CONTABO": {"protocol": "hy2", "host": "de-1.contabo.v.dimonb.com"},
-      "US_1_VULTR": {"protocol": "vmess", "host": "us-1.vultr.v.dimonb.com"}
+      "DE_1": {"protocol": "hy2", "host": "de-1.example.net"},
+      "US_1": {"protocol": "vmess", "host": "us-1.example.net"}
     },
     "premium": {
-      "SG_1_LINODE": {"protocol": "vless", "host": "sg-1.linode.v.dimonb.com"}
+      "SG_1": {"protocol": "vless", "host": "sg-1.example.net"}
     }
   }
 }
@@ -135,9 +135,9 @@ RULE-SET entries are expanded in the order they appear in the template, preservi
 ```yaml
 rules:
   - DOMAIN-SUFFIX,example.com,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/google.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/google.list,PROXY
   - DOMAIN-SUFFIX,test.com,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/youtube.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/youtube.list,PROXY
   - MATCH,DIRECT
 ```
 
@@ -185,7 +185,7 @@ proxy-groups:
 
 rules:
   - DOMAIN-SUFFIX,whatismyipaddress.com,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/google.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/google.list,PROXY
   - MATCH,DIRECT
 ```
 
@@ -195,9 +195,9 @@ The system generates proxy configurations with the following structure:
 
 #### Hysteria2
 ```yaml
-- name: de_1_contabo
+- name: de_1
   type: hysteria2
-  server: de-1.contabo.v.dimonb.com
+  server: de-1.example.net
   port: 47012
   password: bd827d918fab8f0baab41e8f785c52203f829f45f8e9de3467ba97d9e09bdff8
   sni: i.am.com
@@ -213,9 +213,9 @@ The system generates proxy configurations with the following structure:
 
 #### VLESS
 ```yaml
-- name: ru_2_kvmki
+- name: ru_2
   type: vless
-  server: ru-2.kvmki.v.dimonb.com
+  server: ru-2.example.net
   port: 443
   uuid: 5e284f0f-f2c2-3a95-2197-41e478d9f8cf
   tls: true
@@ -235,15 +235,15 @@ The system generates proxy configurations with the following structure:
 
 #### VMess
 ```yaml
-- name: us_1_vultr
+- name: us_1
   type: vmess
-  server: us-1.vultr.v.dimonb.com
+  server: us-1.example.net
   port: 47970
   uuid: 5e284f0f-f2c2-3a95-2197-41e478d9f8cf
   alterId: 0
   cipher: auto
   tls: true
-  servername: us-1.vultr.v.dimonb.com
+  servername: us-1.example.net
   skip-cert-verify: true
   udp: true
 ```

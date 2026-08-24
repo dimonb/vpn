@@ -5,6 +5,7 @@
 {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
 {% set forward_il_group = (features.get('forward-il') if features is mapping else none) %}
 {% set relay = ((forward_group and config.subs.get(forward_group)) or (forward_il_group and config.subs.get(forward_il_group))) %}
+{% set routing = (config.get('routing') if config is mapping and config.get('routing') is mapping else {}) %}
 {
   "dns": {
     "strategy": "ipv4_only",
@@ -21,7 +22,7 @@
         "path": "/dns-query",
         {# On a relay the DoH session rides the tunnel, so resolving dns.quad9.net must not
            itself need the tunnel — and plain 9.9.9.9/udp is dropped on some RU networks
-           (kvmka since 2026-08-17). Use the host resolver (DoT upstream) there. #}
+           (seen on a relay's uplink since 2026-08-17). Use the host resolver (DoT) there. #}
         "domain_resolver": "{{ 'local-dns' if relay else 'bootstrap' }}"{% if forward_group and config.subs.get(forward_group) %},
         "detour": "auto"{% endif %}
       }{% if relay %},
@@ -262,9 +263,12 @@
       {% if forward_group and config.subs.get(forward_group) %}
       { "inbound": "cfgapp-in", "outbound": "auto" },
       {% endif %}
-      {% if forward_group and config.subs.get(forward_group) %}{% set fwd_hosts = [] %}{% for _n, _it in config.subs[forward_group].items() %}{% set _ = fwd_hosts.append(_it.host) %}{% endfor %}{% if 'am-1.outline.ebac.dev' in fwd_hosts %}
-      { "domain_suffix": ["ficbook.net"], "outbound": "am-1.outline.ebac.dev" },
-      {% endif %}{% endif %}
+      {# Per-site pins come from config.routing.pin ({"<domain>": "<exit host>"}), and are
+         emitted only while that exit is actually in this relay's forward group. #}
+      {% if forward_group and config.subs.get(forward_group) %}{% set fwd_hosts = [] %}{% for _n, _it in config.subs[forward_group].items() %}{% set _ = fwd_hosts.append(_it.host) %}{% endfor %}
+      {% for _domain, _exit in (routing.get('pin') or {}).items() %}{% if _exit in fwd_hosts %}
+      { "domain_suffix": ["{{ _domain }}"], "outbound": "{{ _exit }}" },
+      {% endif %}{% endfor %}{% endif %}
       { "rule_set": "geosite-google", "outbound": "auto" },
       { "rule_set": "geosite-telegram", "outbound": "auto" },
       { "rule_set": "geosite-facebook", "outbound": "auto" },
@@ -295,10 +299,12 @@
       {
         "tag": "domain-ru",
         "type": "inline",
+        {# .ru plus config.routing.direct_domains — RU-hosted sites that should resolve
+           locally and go direct instead of taking the RU→exit→RU detour. #}
         "rules": [
-          { "domain_suffix": [".ru"] },
-          { "domain": ["fanfics.me"] },
-          { "domain_suffix": [".fanfics.me"] }
+          { "domain_suffix": [".ru"] }{% for _d in (routing.get('direct_domains') or []) %},
+          { "domain": ["{{ _d }}"] },
+          { "domain_suffix": [".{{ _d }}"] }{% endfor %}
         ]
       },
       {

@@ -29,11 +29,11 @@ templates. Pick a matching `ENV_FILE` / `CONFIG_FILE` / `SERVERS_FILE`:
 
 | Profile | ENV_FILE | CONFIG_FILE | SERVERS_FILE | ansible_user | HYSTERIA2_PORT |
 |---|---|---|---|---|---|
-| ebac (corp) | `.env.ebac` | `config.ebac.json` | `servers.ebac.cfg` | `ubuntu` (+sudo) | 47024 |
-| dimonb (personal) | `.env` (default) | `config.json` | `servers.cfg` | `root` | 47012 |
+| work | `.env.work` | `config.work.json` | `servers.work.cfg` | `ubuntu` (+sudo) | 47024 |
+| personal | `.env` (default) | `config.json` | `servers.cfg` | `root` | 47012 |
 
-> **Select a profile by its `ENV_FILE` and let that carry the rest** — `.env.ebac` already sets
-> `CONFIG_FILE`, `SERVERS_FILE`, `BASE_URL` and the ebac ports/secrets, so `make deploy ENV_FILE=.env.ebac`
+> **Select a profile by its `ENV_FILE` and let that carry the rest** — `.env.work` already sets
+> `CONFIG_FILE`, `SERVERS_FILE`, `BASE_URL` and the work ports/secrets, so `make deploy ENV_FILE=.env.work`
 > is the whole command ("остальное подхватится"). **Never hand-pass `CONFIG_FILE=`/`SERVERS_FILE=` from
 > one row while leaving `ENV_FILE` on another row's value** — that ships one profile's secrets/ports onto
 > the other profile's servers. See [Operating the deploy safely](#operating-the-deploy-safely-dont-shoot-your-own-foot).
@@ -45,7 +45,7 @@ templates. Pick a matching `ENV_FILE` / `CONFIG_FILE` / `SERVERS_FILE`:
 ## How deploy works
 
 ```
-make deploy ENV_FILE=.env.ebac [TEST_ONLY=<host>]     # ebac: .env.ebac carries CONFIG_FILE + SERVERS_FILE
+make deploy ENV_FILE=.env.work [TEST_ONLY=<host>]     # work: .env.work carries CONFIG_FILE + SERVERS_FILE
 make deploy                     [TEST_ONLY=<host>]     # personal: bare defaults (.env / config.json / servers.cfg)
 ```
 1. `check-env` validates required vars are set in the ENV_FILE.
@@ -106,11 +106,11 @@ does **not** warn if you cross them, and the classic self-inflicted wound is dep
 profile's secrets onto another profile's servers.**
 
 **Golden rule — the three knobs must come from the same profile row.** Two safe forms:
-- pass only `ENV_FILE=.env.ebac` (it already supplies `CONFIG_FILE`+`SERVERS_FILE`) — simplest for ebac; or
+- pass only `ENV_FILE=.env.work` (it already supplies `CONFIG_FILE`+`SERVERS_FILE`) — simplest for work; or
 - set all three explicitly as one matched triple (the `ENVF/CFG/SRV` vars in [`doc/RUNBOOK_deploy.md`](doc/RUNBOOK_deploy.md)).
 
-**The footgun is specifying *some but not all*** — e.g. `make deploy CONFIG_FILE=config.ebac.json
-SERVERS_FILE=servers.ebac.cfg` **without** `ENV_FILE`. That silently pairs the ebac servers with the
+**The footgun is specifying *some but not all*** — e.g. `make deploy CONFIG_FILE=config.work.json
+SERVERS_FILE=servers.work.cfg` **without** `ENV_FILE`. That silently pairs the work servers with the
 *default* `.env`'s salt/ports (the personal profile). If you're typing `CONFIG_FILE=`/`SERVERS_FILE=`,
 you **must** also set the matching `ENV_FILE=` — or just drop them and use `ENV_FILE=` alone.
 
@@ -123,7 +123,7 @@ you **must** also set the matching `ENV_FILE=` — or just drop them and use `EN
 
 **Pre-flight, every time:**
 1. **Read the first banner line** the deploy prints — it echoes the ports:
-   `Using ports - … Hysteria2: 47024, Hysteria2-v2: 47031` ⇒ **ebac**; `47012 / 47013` ⇒ **personal**.
+   `Using ports - … Hysteria2: 47024, Hysteria2-v2: 47031` ⇒ **work**; `47012 / 47013` ⇒ **personal**.
    Wrong number for the fleet you're targeting = wrong `ENV_FILE` ⇒ **abort immediately.**
 2. For a risky or first-of-its-kind change, scope to one host with `TEST_ONLY=<host>` before the fleet.
 3. Run it in the background and watch to the end — `up --force-recreate` restarts every container, i.e. a
@@ -181,8 +181,8 @@ tunnel is down and the DPI can't poison lookups (`vpn/sing-box.json.j2`, all rel
   `default_domain_resolver: quad9-doh` a dead tunnel also killed `lookup ok.ru` and the relay
   stopped accepting clients entirely (outage 2026-08-17..23, see
   [`doc/RUNBOOK_dpi_failover.md`](doc/RUNBOOK_dpi_failover.md)). Plaintext `9.9.9.9` is no longer
-  used for this either — it is blocked outright on kvmka since 2026-08-17.
-- **`local-dns` is poisoned on RU relays** (kvmka answers `linkedin/meduza/torproject/facebook`
+  used for this either — one relay's network blocks it outright (since 2026-08-17).
+- **`local-dns` is poisoned on RU relays** (a relay's own resolver answers `linkedin/meduza/torproject/facebook`
   with `77.94.164.71`). Harmless while it is dial-only, but it makes DNS changes here easy to get
   wrong: after touching this, fetch a poisoned domain **through** the relay and confirm real
   content rather than a 200-with-block-page.
@@ -194,10 +194,10 @@ artifact (remote geoip/geosite rule-sets still downloading).
 ## cfgapp's own egress on relays (origin fetches go through the tunnel)
 
 `cfgapp` is not just a config renderer — for every request it fetches the origin
-(`CONFIG_HOST`, e.g. `shadowrocket.ebac.dev`) twice: the bare path, then `<path>.tpl` when the
+(`CONFIG_HOST`, e.g. `subs.example.net`) twice: the bare path, then `<path>.tpl` when the
 first is a 404. The origin is a GitHub Pages site, and **GH Pages' anycast IPs are partially
 blocked from RU networks** (2026-08-17: only `185.199.110.153` of the four answered from both
-ru-0/Yandex and ru-2/kvmka; the other three had their SYN dropped). DNS round-robin then makes
+RU relays, which sit on different providers; the other three had their SYN dropped). DNS round-robin then makes
 each fetch a coin flip and two fetches per request compound it — `~6%` success, which reads as a
 flapping host, not a blocked origin.
 
@@ -231,8 +231,8 @@ Docker Hub, which is reachable), and going direct the deploy's last task —
 Error response from daemon: Head "https://ghcr.io/v2/xtls/xray-core/manifests/26.2.6": EOF
 ```
 
-(also seen as `… TLS handshake timeout`.) 2026-08-17: it hit `ru-2.kvmki.v.dimonb.com` on every
-deploy; `ru-0.yandex.v.dimonb.com` only got through because it had the manifest cached.
+(also seen as `… TLS handshake timeout`.) 2026-08-17: it hit `ru-2.example.net` on every
+deploy; `ru-0.example.net` only got through because it had the manifest cached.
 
 **Fix: the image is mirrored, so nothing the deploy pulls lives on a blocked registry.**
 `vpn/docker-compose.yml.j2` uses `dimonb/xray-core:26.2.6` — a copy of `ghcr.io/xtls/xray-core`
@@ -293,7 +293,7 @@ Same family of problem as GH Pages / `raw.githubusercontent.com` being partly bl
 Many Requests` — globally, not to us specifically (reproduced from the laptop and from ie-0, on an
 unrelated repo; `github.com` itself was fine, `x-served-by: cache-…-DUB`, i.e. Fastly). Every list
 fetch failed, and since the strict contract turns a failed list into a hard error, both RU relays
-served `502` for `/contabo.conf` and Gatus paged.
+served `502` for a template path and the uptime check paged.
 
 The contract was right; the architecture around it was not. cfgapp re-fetched **every** list on
 **every** request — 5 URLs (`lord-alfred/ipranges` amazon+apple v4/v6, `HybridNetworks/whatsapp-cidr`)
@@ -339,8 +339,8 @@ wired into `TemplateProcessor.fetch_list_text()`:
   zero-length `200` all pass it, and caching one would pin the truncation for a day *and* keep it as
   the fallback for a month. `_raise_for_list_status` rejects anything that is not a non-empty `200`,
   which routes it into the normal stale-fallback path.
-- **Our own lists get a 60 s window, not 24 h** (`LIST_CACHE_OWN_HOSTS`, default `s.dimonb.com`, plus
-  `CONFIG_HOST`/`API_HOST`). The `.list` files under `s.dimonb.com/lists/` are hand-edited by the
+- **Our own lists get a 60 s window, not 24 h** (`LIST_CACHE_OWN_HOSTS`, default `lists.example.net`, plus
+  `CONFIG_HOST`/`API_HOST`). The `.list` files under `lists.example.net/lists/` are hand-edited by the
   per-site routing workflow and must reach clients in minutes; only the "don't even ask" window is
   short — they still get the full 30-day outage fallback.
 - The same-host branch of `smart_fetch` (RULE-SETs proxied via `API_HOST`, our own origin) is
@@ -400,13 +400,15 @@ origin → the relay was dead until the URLs were changed.
 Single source of truth is the inline `domain-ru` rule_set — both the DNS rule
 (`{"rule_set":"domain-ru","server":"local-dns"}`) and the route rule (`domain-ru → direct-out`) use it.
 
-- **RU site on a reachable RU IP** (e.g. `fanfics.me`): add it to `domain-ru` → resolves local + routes
-  direct (fast; avoids the RU→EU→RU detour).
-- **Censored-in-RU + Cloudflare-fronted site** (e.g. `ficbook.net`): direct is impossible (DPI drops the
-  TLS ClientHello by SNI) so it must go through a tunnel; Cloudflare then serves a JS challenge a real
-  browser passes but a datacenter exit IP may get challenge-looped. Pinned to a specific exit via a
-  `route.rules` entry gated on that exit being present (`'am-1.outline.ebac.dev' in fwd_hosts`). A
-  residential/mobile RU-region exit would avoid the challenge; we don't have one.
+- **RU site on a reachable RU IP**: add it to `config.routing.direct_domains` → the template puts it in
+  the `domain-ru` rule_set, so it resolves local + routes direct (fast; avoids the RU→EU→RU detour).
+- **Censored-in-RU + Cloudflare-fronted site**: direct is impossible (DPI drops the TLS ClientHello by
+  SNI) so it must go through a tunnel; Cloudflare then serves a JS challenge a real browser passes but a
+  datacenter exit IP may get challenge-looped. Pin it to whichever exit works: `config.routing.pin`
+  (`{"<domain>": "<exit host>"}`) renders a `route.rules` entry, emitted only while that exit is actually
+  in the relay's forward group. A residential/mobile RU-region exit would avoid the challenge entirely.
+
+Both lists are per-profile data, so they live in `config*.json`, not in the template.
 
 ## Credentials & keys (all derived, keep consistent per profile)
 
@@ -436,11 +438,10 @@ on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless out
              relays")
 ```
 
-## Adding a host on Oracle Cloud (de-2.oracle, added 2026-08-24)
+## Adding a host on Oracle Cloud
 
-The tenancy is driven with the `oci` CLI from a repo-local venv (`./.venv-oci/bin/oci`,
-gitignored); credentials live in `~/.oci/config` + `~/.oci/oci_api_key.pem`. Four things OCI
-does differently from every other provider in this fleet:
+Driven with the `oci` CLI (API signing key; a repo-local venv keeps it off the system PATH).
+Four things OCI does differently from every other provider used here:
 
 - **No public IP by default.** A new instance only gets a private address; assign one with
   `oci network public-ip create --lifetime EPHEMERAL --private-ip-id <primary-private-ip-ocid>`
@@ -458,16 +459,16 @@ does differently from every other provider in this fleet:
   entry (`ie-0` is the same size and does the same). All stack images have arm64 variants too, so
   an Ampere A1 shape works if capacity allows.
 
-DNS for `*.v.dimonb.com` is OpenTofu + Cloudflare in the **k8s-dibot** repo (`dns/dimonb.com.tf`,
-state in R2): add a `cloudflare_dns_record`, `make plan-dns`, `make deploy-dns`; CI re-applies on
-merge. Host monitoring lives in the same repo — `kustomize/gatus/config/vpn.yaml` (telegram
-alerts).
+DNS for the fleet's zone and the uptime checks are managed **outside this repo** (see the operator's
+local notes for where). Two rules regardless of the tooling: the A record must resolve *before* the
+first deploy, because caddy takes an ACME certificate on the host name; and a host nobody monitors
+is a host whose death you learn about from users.
 
 ## Gotchas
 
 - **`ssh` is aliased to kitty's ssh-kitten** in this environment → use **`/usr/bin/ssh`** / `/usr/bin/scp` for non-interactive commands.
-- **ebac servers**: root SSH key is on `ru-1`; **`am-1` (Yerevan exit) is root-only** — connect `root@am-1` with `-o IdentitiesOnly=yes -i ~/.ssh/id_rsa`, and its dir is `/root/vpn` (inventory line carries the per-host `ansible_user=root` override). For the rest connect as **`ubuntu@` + `sudo`**; the `vpn/` dir is root-owned (`drwx------`), so `sudo bash -c 'cd /home/ubuntu/vpn && …'`.
-- **`ru-2.kvmki.v.dimonb.com` also runs FreeSWITCH**; its VPN dir is `/root/vpn`. Deploy only touches the docker-compose stack there — FreeSWITCH is separate.
+- **Per-profile SSH users differ**: one profile connects as `root` (dir `/root/vpn`), the other as **`ubuntu@` + `sudo`** (dir `/home/ubuntu/vpn`, root-owned `drwx------`, so `sudo bash -c 'cd /home/ubuntu/vpn && …'`). Individual hosts can override it in the inventory line (`ansible_user=`, `ansible_ssh_private_key_file=`, `ansible_ssh_common_args='-o IdentitiesOnly=yes'`) — check the inventory before assuming.
+- **`ru-2.example.net` also runs FreeSWITCH**; its VPN dir is `/root/vpn`. Deploy only touches the docker-compose stack there — FreeSWITCH is separate.
 - **Mainline sing-box (`itdoginfo/sing-box:v1.12.12`) has no `tls_fragment`** — that field is rejected.
 - Validate a rendered config with sing-box's own checker (needs the cert mounted):
   `docker run --rm --entrypoint sing-box -v /path/sing-box.json:/c.json -v /path/cert:/etc/xray/certs itdoginfo/sing-box:v1.12.12 check -c /c.json`

@@ -66,6 +66,7 @@ services:
       - "127.0.0.1:8003:8000"
     environment:
       - CONFIG_HOST={{ config_host }}
+      - LIST_CACHE_OWN_HOSTS={{ list_cache_own_hosts | default('') }}
       - PROXY_CONFIG=/config.json
       - OBFS_PASSWORD={{ obfs_password }}
       - HYSTERIA2_PORT={{ hysteria2_port }}

@@ -52,7 +52,7 @@ Clients will receive VLESS URLs with:
   "listen_port": 443,
   "users": [
     {
-      "name": "dimonb",
+      "name": "alice",
       "uuid": "generated-uuid",
       "flow": ""
     }

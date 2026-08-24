@@ -19,17 +19,17 @@ def sample_config() -> dict[str, Any]:
         "users": ["dimonb"],
         "subs": {
             "default": {
-                "DE_1_CONTABO": {
+                "DE_1": {
                     "protocol": "hy2",
-                    "host": "de-1.contabo.v.dimonb.com",
+                    "host": "de-1.example.net",
                 },
-                "RU_1_KVMKI": {
+                "RU_1": {
                     "protocol": "vless",
-                    "host": "ru-1.kvmki.v.dimonb.com",
+                    "host": "ru-1.example.net",
                 },
-                "RU_2_KVMKI": {
+                "RU_2": {
                     "protocol": "vless-v2",
-                    "host": "ru-2.kvmki.v.dimonb.com",
+                    "host": "ru-2.example.net",
                 },
             }
         },

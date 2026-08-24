@@ -100,11 +100,11 @@ Edit `config.json` with your users and subscription configuration:
   ],
   "subs": {
     "default": {
-      "de_1_contabo": {"protocol": "hy2", "host": "de-1.your-domain.com"},
-      "us_1_vultr": {"protocol": "vmess", "host": "us-1.your-domain.com"}
+      "de_1": {"protocol": "hy2", "host": "de-1.your-domain.com"},
+      "us_1": {"protocol": "vmess", "host": "us-1.your-domain.com"}
     },
     "premium": {
-      "sg_1_linode": {"protocol": "vless", "host": "sg-1.your-domain.com"}
+      "sg_1": {"protocol": "vless", "host": "sg-1.your-domain.com"}
     }
   }
 }

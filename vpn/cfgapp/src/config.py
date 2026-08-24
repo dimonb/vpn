@@ -55,8 +55,9 @@ class Settings(BaseSettings):
     # Lists we publish ourselves are edited by hand (the per-site routing
     # workflow) and must reach clients in minutes, not a day. They still get the
     # full max_age fallback — only the "do not even ask" window is short.
-    # config_host / api_host are added to this set automatically.
-    list_cache_own_hosts: str = Field(default="s.dimonb.com")
+    # config_host / api_host are always in this set; add any extra host that
+    # serves hand-edited lists via LIST_CACHE_OWN_HOSTS (comma-separated).
+    list_cache_own_hosts: str = Field(default="")
     list_cache_own_fresh_seconds: int = Field(default=60)
 
     # Logging

@@ -22,25 +22,25 @@ class TestShadowRocketSubscription:
             "users": ["dimonb", "diakon", "ivan", "petrov"],
             "subs": {
                 "default": {
-                    "DE_1_CONTABO": {
+                    "DE_1": {
                         "protocol": "hy2",
-                        "host": "de-1.contabo.v.dimonb.com",
+                        "host": "de-1.example.net",
                     },
-                    "US_1_VULTR": {
+                    "US_1": {
                         "protocol": "vmess",
-                        "host": "us-1.vultr.v.dimonb.com",
+                        "host": "us-1.example.net",
                     },
                 },
                 "premium": {
-                    "SG_1_LINODE": {
+                    "SG_1": {
                         "protocol": "vless",
-                        "host": "sg-1.linode.v.dimonb.com",
+                        "host": "sg-1.example.net",
                     }
                 },
                 "v2": {
-                    "DE_1_CONTABO_V2": {
+                    "DE_1_V2": {
                         "protocol": "hy2-v2",
-                        "host": "de-1.contabo.v.dimonb.com",
+                        "host": "de-1.example.net",
                     },
                 },
             },
@@ -77,10 +77,10 @@ class TestShadowRocketSubscription:
         hy2_url = hy2_urls[0]
 
         # Parse Hysteria2 URL
-        assert "de-1.contabo.v.dimonb.com:47012" in hy2_url
+        assert "de-1.example.net:47012" in hy2_url
         assert "peer=i.am.com" in hy2_url
         assert "obfs-password=test-obfs-password" in hy2_url
-        assert "#DE_1_CONTABO" in hy2_url
+        assert "#DE_1" in hy2_url
 
         # Check VMess URL
         vmess_urls = [url for url in urls if url.startswith("vmess://")]
@@ -95,8 +95,8 @@ class TestShadowRocketSubscription:
         vmess_b64 = vmess_url.split("vmess://")[1].split("?")[0]
         vmess_config = json.loads(base64.b64decode(vmess_b64).decode())
 
-        assert vmess_config["add"] == "us-1.vultr.v.dimonb.com"
-        assert vmess_config["ps"] == "US_1_VULTR"
+        assert vmess_config["add"] == "us-1.example.net"
+        assert vmess_config["ps"] == "US_1"
         assert vmess_config["net"] == "ws"
         assert vmess_config["tls"] == "tls"
 
@@ -127,7 +127,7 @@ class TestShadowRocketSubscription:
         vless_url = vless_urls[0]
 
         # Parse VLESS URL
-        assert "sg-1.linode.v.dimonb.com" in vless_url
+        assert "sg-1.example.net" in vless_url
         assert "tls=1" in vless_url
         assert "peer=ok.ru" in vless_url
         assert "alpn=h2%2Chttp%2F1.1" in vless_url  # URL-encoded comma
@@ -278,10 +278,10 @@ class TestShadowRocketSubscription:
         hy2_url = hy2_urls[0]
 
         # Parse Hysteria2 v2 URL
-        assert "de-1.contabo.v.dimonb.com:47013" in hy2_url
+        assert "de-1.example.net:47013" in hy2_url
         assert "peer=i.am.com" in hy2_url
         assert "obfs-password=test-obfs-password" in hy2_url
-        assert "#DE_1_CONTABO_V2" in hy2_url
+        assert "#DE_1_V2" in hy2_url
         # Check that password is in user:password format
         assert "testuser:test-password@" in hy2_url
 

@@ -16,8 +16,8 @@ services:
       - PORT=8000
       
       # API Configuration
-      - CONFIG_HOST=${CONFIG_HOST:-shadowrocket.ebac.dev}
-      - API_HOST=${API_HOST:-shadowrocket.ebac.dev}
+      - CONFIG_HOST=${CONFIG_HOST:-subs.example.net}
+      - API_HOST=${API_HOST:-subs.example.net}
       
       # Authentication
       - SALT=${SALT:-your-secret-salt-here}

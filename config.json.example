@@ -1,17 +1,34 @@
 {
   "users": [
-    "dimonb",
-    "diakon", 
-    "ivan",
-    "petrov"
+    "alice",
+    "bob",
+    "carol",
+    "dave"
   ],
   "subs": {
     "default": {
-      "DE_1_CONTABO": {"protocol": "hy2", "host": "xxxx"},
-      "DE_2_VLESS": {"protocol": "vless", "host": "xxxx"}
+      "DE_1": {
+        "protocol": "hy2",
+        "host": "xxxx"
+      },
+      "DE_2_VLESS": {
+        "protocol": "vless",
+        "host": "xxxx"
+      }
     },
     "reality": {
-      "SE_1_REALITY": {"protocol": "vless", "host": "13.60.43.17"}
+      "SE_1_REALITY": {
+        "protocol": "vless",
+        "host": "203.0.113.10"
+      }
+    }
+  },
+  "routing": {
+    "direct_domains": [
+      "some-ru-site.ru"
+    ],
+    "pin": {
+      "censored-site.example": "de-1.your-domain.com"
     }
   }
 }

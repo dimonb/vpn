@@ -24,19 +24,19 @@ class TestClashProcessorIntegration:
             "users": ["dimonb", "diakon"],
             "subs": {
                 "default": {
-                    "DE_1_CONTABO": {
+                    "DE_1": {
                         "protocol": "hy2",
-                        "host": "de-1.contabo.v.dimonb.com",
+                        "host": "de-1.example.net",
                     },
-                    "US_1_VULTR": {
+                    "US_1": {
                         "protocol": "vmess",
-                        "host": "us-1.vultr.v.dimonb.com",
+                        "host": "us-1.example.net",
                     },
                 },
                 "premium": {
-                    "SG_1_LINODE": {
+                    "SG_1": {
                         "protocol": "vless",
-                        "host": "sg-1.linode.v.dimonb.com",
+                        "host": "sg-1.example.net",
                     }
                 },
             },
@@ -132,7 +132,7 @@ rules:
         )  # 2 proxies (one per proxy, not per user)
 
         # Check proxy names
-        expected_names = ["DE_1_CONTABO", "US_1_VULTR"]
+        expected_names = ["DE_1", "US_1"]
         assert set(proxy_group["proxies"]) == set(expected_names)
 
     def test_replace_proxy_placeholders_premium(
@@ -164,7 +164,7 @@ rules:
         assert len(proxy_group["proxies"]) == 1  # 1 proxy (one per proxy, not per user)
 
         # Check proxy names
-        expected_names = ["SG_1_LINODE"]
+        expected_names = ["SG_1"]
         assert set(proxy_group["proxies"]) == set(expected_names)
 
     def test_replace_proxy_placeholders_no_proxy_config(

@@ -3,13 +3,13 @@
 Prereqs on the local machine: `ansible`, `make`, `jq`, `/usr/bin/ssh`. See [`AGENTS.md`](../AGENTS.md)
 for the architecture and the profile table.
 
-Throughout, pick the profile triple. Examples use **ebac**; for the **dimonb/personal** profile drop
+Throughout, pick the profile triple. Examples use **work**; for the **personal** profile drop
 the explicit args (they default to `.env` / `config.json` / `servers.cfg`).
 
 ```bash
-# ebac
-ENVF=.env.ebac ; CFG=config.ebac.json ; SRV=servers.ebac.cfg
-# dimonb (defaults)
+# work
+ENVF=.env.work ; CFG=config.work.json ; SRV=servers.work.cfg
+# personal (defaults)
 ENVF=.env      ; CFG=config.json      ; SRV=servers.cfg
 ```
 
@@ -50,8 +50,8 @@ python3 -c "import json;json.load(open('$OUT'));print('JSON OK')"
 2. **Run sing-box's own checker** on the target host (needs the cert mounted, so it doesn't false-fail):
 
 ```bash
-/usr/bin/scp -q "$OUT" root@ru-1.outline.ebac.dev:/tmp/rendered.json
-/usr/bin/ssh root@ru-1.outline.ebac.dev \
+/usr/bin/scp -q "$OUT" root@ru-1.example.org:/tmp/rendered.json
+/usr/bin/ssh root@ru-1.example.org \
   'docker run --rm --entrypoint sing-box -v /tmp/rendered.json:/c.json \
      -v /home/ubuntu/vpn/cert:/etc/xray/certs itdoginfo/sing-box:v1.12.12 check -c /c.json; echo exit=$?'
 ```
@@ -94,18 +94,21 @@ diff <(python3 -m json.tool /tmp/live.json) <(python3 -m json.tool /tmp/rendered
 
 ## Route a specific site (direct / to an exit)
 
-Per-site routing lives in `vpn/sing-box.json.j2` (relay-gated). The inline `domain-ru` rule_set is the
-single source of truth — it drives both the DNS rule (`{"rule_set":"domain-ru","server":"local-dns"}`)
-and the route rule (`domain-ru → direct-out`). See AGENTS.md → "Per-site routing" for the decision.
+Per-site routing is **data, not template** — it lives in `config*.json` under `routing`, and
+`vpn/sing-box.json.j2` renders it (relay-gated). The inline `domain-ru` rule_set is the single source
+of truth for the direct list: it drives both the DNS rule
+(`{"rule_set":"domain-ru","server":"local-dns"}`) and the route rule (`domain-ru → direct-out`).
+See AGENTS.md → "Per-site routing" for the decision.
 
-- **RU-IP site, reachable & not blocked** (e.g. `fanfics.me`) — resolve local + go direct: add it to
-  the `domain-ru` rule_set (`{"domain":["site"]}` + `{"domain_suffix":[".site"]}`), then deploy. Verify
-  it egresses via `direct-out` and is fast (not the RU→EU→RU detour).
-- **Censored-in-RU + Cloudflare-fronted site** (e.g. `ficbook.net`) — must go through a tunnel; pin it
-  to an exit with a `route.rules` entry gated on that exit being a forward member (see the existing
-  `ficbook.net → am-1.outline.ebac.dev` rule guarded by `'am-1.outline.ebac.dev' in fwd_hosts`). curl
-  will still show Cloudflare's JS challenge (403) — verify in a **real browser**; routing is confirmed
-  by the log line `outbound/hysteria2[<exit>]: outbound connection to <site>`.
+- **RU-IP site, reachable & not blocked** — resolve local + go direct: add the domain to
+  `routing.direct_domains`, then deploy. Verify it egresses via `direct-out` and is fast (not the
+  RU→EU→RU detour).
+- **Censored-in-RU + Cloudflare-fronted site** — must go through a tunnel; pin it with
+  `routing.pin = {"<domain>": "<exit host>"}`. The rule is emitted only while that exit is a member of
+  the relay's forward group, so a pin to a dropped exit degrades to the normal pool instead of
+  black-holing the site. curl will still show Cloudflare's JS challenge (403) — verify in a **real
+  browser**; routing is confirmed by the log line
+  `outbound/hysteria2[<exit>]: outbound connection to <site>`.
 
 Confirm which outbound a domain takes with the client snippet in
 [`RUNBOOK_dpi_failover.md`](RUNBOOK_dpi_failover.md) §2 + `docker compose logs sing-box | grep <domain>`.

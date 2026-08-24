@@ -21,25 +21,25 @@ class TestProxyConfig:
             "users": ["dimonb", "diakon", "ivan", "petrov"],
             "subs": {
                 "default": {
-                    "DE_1_CONTABO": {
+                    "DE_1": {
                         "protocol": "hy2",
-                        "host": "de-1.contabo.v.dimonb.com",
+                        "host": "de-1.example.net",
                     },
-                    "US_1_VULTR": {
+                    "US_1": {
                         "protocol": "vmess",
-                        "host": "us-1.vultr.v.dimonb.com",
+                        "host": "us-1.example.net",
                     },
                 },
                 "v2": {
-                    "DE_1_CONTABO_V2": {
+                    "DE_1_V2": {
                         "protocol": "hy2-v2",
-                        "host": "de-1.contabo.v.dimonb.com",
+                        "host": "de-1.example.net",
                     },
                 },
                 "premium": {
-                    "SG_1_LINODE": {
+                    "SG_1": {
                         "protocol": "vless",
-                        "host": "sg-1.linode.v.dimonb.com",
+                        "host": "sg-1.example.net",
                     }
                 },
             },
@@ -88,30 +88,30 @@ class TestProxyConfig:
         subs = proxy_config.get_subs()
         assert "default" in subs
         assert "premium" in subs
-        assert "DE_1_CONTABO" in subs["default"]
-        assert "US_1_VULTR" in subs["default"]
-        assert "SG_1_LINODE" in subs["premium"]
+        assert "DE_1" in subs["default"]
+        assert "US_1" in subs["default"]
+        assert "SG_1" in subs["premium"]
 
     def test_get_subscription_proxies_default(self, config_file: Path) -> None:
         """Test getting default subscription proxies."""
         proxy_config = ProxyConfig(str(config_file))
         proxies = proxy_config.get_subscription_proxies()
-        assert "DE_1_CONTABO" in proxies
-        assert "US_1_VULTR" in proxies
+        assert "DE_1" in proxies
+        assert "US_1" in proxies
         assert len(proxies) == 2
 
     def test_get_subscription_proxies_premium(self, config_file: Path) -> None:
         """Test getting premium subscription proxies."""
         proxy_config = ProxyConfig(str(config_file))
         proxies = proxy_config.get_subscription_proxies("premium")
-        assert "SG_1_LINODE" in proxies
+        assert "SG_1" in proxies
         assert len(proxies) == 1
 
     def test_get_subscription_proxies_v2(self, config_file: Path) -> None:
         """Test getting v2 subscription proxies."""
         proxy_config = ProxyConfig(str(config_file))
         proxies = proxy_config.get_subscription_proxies("v2")
-        assert "DE_1_CONTABO_V2" in proxies
+        assert "DE_1_V2" in proxies
         assert len(proxies) == 1
 
     def test_get_subscription_proxies_nonexistent(self, config_file: Path) -> None:
@@ -119,8 +119,8 @@ class TestProxyConfig:
         proxy_config = ProxyConfig(str(config_file))
         proxies = proxy_config.get_subscription_proxies("nonexistent")
         # Should fallback to default
-        assert "DE_1_CONTABO" in proxies
-        assert "US_1_VULTR" in proxies
+        assert "DE_1" in proxies
+        assert "US_1" in proxies
 
     def test_generate_proxy_configs_default(self, config_file: Path) -> None:
         """Test proxy configuration generation for default subscription."""
@@ -148,7 +148,7 @@ class TestProxyConfig:
         # Check that all configs are VLESS
         for config in configs:
             assert config["type"] == "vless"
-            assert "SG_1_LINODE" in config["name"]
+            assert "SG_1" in config["name"]
 
     @patch("src.proxy_config.settings")
     def test_generate_proxy_configs_v2(self, mock_settings, config_file: Path) -> None:
@@ -165,7 +165,7 @@ class TestProxyConfig:
         for config in configs:
             assert config["type"] == "hysteria2"
             assert config["port"] == 47013  # v2 port
-            assert "DE_1_CONTABO_V2" in config["name"]
+            assert "DE_1_V2" in config["name"]
 
     @patch("src.proxy_config.settings")
     def test_generate_proxy_configs_v2_with_user(
@@ -184,7 +184,7 @@ class TestProxyConfig:
         for config in configs:
             assert config["type"] == "hysteria2"
             assert config["port"] == 47013  # v2 port
-            assert "DE_1_CONTABO_V2" in config["name"]
+            assert "DE_1_V2" in config["name"]
             assert (
                 config["password"] == "testuser:test-password"
             )  # user:password format
@@ -368,7 +368,7 @@ class TestProxyConfig:
         assert len(proxy_list) == 2
 
         # Check that names follow expected pattern
-        expected_names = ["DE_1_CONTABO", "US_1_VULTR"]
+        expected_names = ["DE_1", "US_1"]
         assert set(proxy_list) == set(expected_names)
 
     def test_get_proxy_list_premium(self, config_file: Path) -> None:
@@ -380,7 +380,7 @@ class TestProxyConfig:
         assert len(proxy_list) == 1
 
         # Check that names follow expected pattern
-        expected_names = ["SG_1_LINODE"]
+        expected_names = ["SG_1"]
         assert set(proxy_list) == set(expected_names)
 
     def test_unsupported_protocol(self, config_file: Path) -> None:

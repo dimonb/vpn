@@ -1,10 +1,10 @@
 {
-  "users": ["dimonb"],
+  "users": ["alice"],
   "subs": {
     "reality": {
-      "RU_0_YANDEX": {
+      "RU_0": {
         "protocol": "vless",
-        "host": "ru-1.yandex.v.dimonb.com"
+        "host": "ru-1.example.net"
       }
     }
   }

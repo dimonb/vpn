@@ -20,7 +20,7 @@ DoH-to-Quad9 (also TLS) is disrupted the same way, so on relays DNS is sent thro
 
 ## 1. Confirm the diagnosis
 
-Run from the **relay** (the RU box). `$UP` = an upstream/exit host (e.g. `fr-2.outline.ebac.dev`).
+Run from the **relay** (the RU box). `$UP` = an upstream/exit host (e.g. `fr-2.example.org`).
 
 ```bash
 # a) vless path dead? TCP connects but TLS handshake never completes:
@@ -46,7 +46,7 @@ openssl s_client -connect 127.0.0.1:8443  -servername ok.ru        </dev/null 2>
 
 From the **relay**, spin up a throwaway sing-box client (socks → hysteria2 → exit) and check egress.
 Creds are profile-derived: `password = sha256("system.$SALT")`, obfs = `$OBFS_PASSWORD`, port =
-`$HYSTERIA2_PORT` (ebac 47024, dimonb 47012). Use the exit's IP.
+`$HYSTERIA2_PORT` (work 47024, personal 47012). Use the exit's IP.
 
 ```bash
 IMG=$(docker inspect vpn-sing-box-1 --format '{{.Config.Image}}')
@@ -67,18 +67,18 @@ docker rm -f hyt >/dev/null 2>&1
 ```
 
 Repeat for each candidate exit. **Only keep the ones that return the exit's IP.** (In the last
-incident: ebac fr-2/de-2/il-1 worked, ie-1/ie-3/ie-4 did not; dimonb ie-0 worked, nl-0 did not.)
+incident: work fr-2/de-2/il-1 worked, ie-1/ie-3/ie-4 did not; personal ie-0 worked, nl-0 did not.)
 
 ## 3. Apply the fix in the deploy source
 
 **a) `config*.json`** — in the relay's forward group(s), set the working upstreams to `hy2` and drop
 the non-working ones. The relay group is `config.proxy[<relay>].features.forward-nonru` (and
-`forward-il`). Example (ebac `ebac_forward`):
+`forward-il`). Example (work `work_forward`):
 
 ```json
-"ebac_forward": {
-  "FR_2_HY2": { "protocol": "hy2", "host": "fr-2.outline.ebac.dev" },
-  "DE_2_HY2": { "protocol": "hy2", "host": "de-2.outline.ebac.dev" }
+"work_forward": {
+  "FR_2_HY2": { "protocol": "hy2", "host": "fr-2.example.org" },
+  "DE_2_HY2": { "protocol": "hy2", "host": "de-2.example.org" }
 }
 ```
 
@@ -92,8 +92,8 @@ keep it). All relay-gated on the `relay` flag:
   `quad9-doh` (DoH, `detour:"auto"`) and `final` is `quad9-doh`, so destination domains resolve
   unpoisoned at the exit. The `domain-ru` DNS rule stays on `local-dns` (RU perspective, works
   with a dead tunnel).
-- local DNS on RU relays **is poisoned** (on kvmka `linkedin/meduza/torproject/facebook` →
-  `77.94.164.71`). That is fine as long as it is only used for dialing — verify after any DNS
+- local DNS on RU relays **is poisoned** (`linkedin/meduza/torproject/facebook` all resolve to one
+  sinkhole address). That is fine as long as it is only used for dialing — verify after any DNS
   change by fetching a poisoned domain through the relay and checking for real content, not a
   200-with-block-page (`grep -iE 'ограничен|роскомнадзор'`).
 
@@ -126,20 +126,20 @@ resolver (`route.default_domain_resolver`, each exit outbound's `domain_resolver
 - **Per-site quirks** (a Russian site that's slow through the tunnel, or a censored site that must
   bypass the DPI): see AGENTS.md → "Per-site routing". RU-IP sites go in the `domain-ru` rule_set
   (direct + local resolve); censored + Cloudflare-fronted sites are pinned to an exit.
-- Last applied: 2026-08-24 — dimonb `ru-0` → **ie-0 + de-2.oracle** (Frankfurt, added so the
-  urltest finally has something to fail over to); `ru-2` → **ru-0** (Yandex) → those two, because
-  kvmka drops QUIC to Oracle as well as to AWS — Yandex reaches both. ebac `ru-1` → **am-1 only**
-  (still single-exit). `fanfics.me`→direct, `ficbook.net`→am-1 (ebac).
+- Last applied: 2026-08-24 — personal `ru-0` → **ie-0 + de-2** (a second exit added so the urltest
+  finally has something to fail over to); `ru-2` → **ru-0** → those two, because ru-2's network drops
+  QUIC to both of those clouds while ru-0's reaches them. work `ru-1` → **am-1 only** (still
+  single-exit). Per-site routing lives in `config.routing` (see AGENTS.md).
 - Previously: 2026-08-23 — see the incident below.
-- Previously: 2026-07-03 — ebac `ru-1` → fr-2/de-2/am-1/il-1; dimonb `ru-2` → ie-0.
+- Previously: 2026-07-03 — work `ru-1` → fr-2/de-2/am-1/il-1; personal `ru-2` → ie-0.
 
 ## Incident 2026-08-17/19 — Hysteria2 blocked to AWS, and a DNS deadlock on top
 
-**What happened.** On the kvmka network (AS212165: ebac `ru-1`, dimonb `ru-2`) Hysteria2/QUIC to
-**every AWS exit** (fr-2, de-2, ie-1, il-1, us-1, ie-0) stopped establishing — the QUIC handshake is
+**What happened.** Both RU relays (`ru-1`, `ru-2`) sit on one small provider, and from that network
+Hysteria2/QUIC to **every exit in one large cloud** (fr-2, de-2, ie-1, il-1, us-1, ie-0) stopped establishing — the QUIC handshake is
 dropped while *plain* UDP to the same ip:port still arrives (verify with tcpdump on the exit).
-Non-AWS exits were unaffected: **am-1** (Armenia, 178.160.230.38) and RU-domestic `ru-0` (Yandex)
-both worked. `ru-0` itself still reached AWS fine, so the block is per-source-network.
+Exits elsewhere were unaffected: **am-1** and the RU-domestic `ru-0` both worked, and `ru-0` itself
+still reached that cloud fine — so the block is per-source-network, not per-destination.
 
 **Why clients could not even connect.** DNS was chained to the tunnel: `quad9-doh` rode
 `detour:"auto"`, and `route.default_domain_resolver` pointed at it. With the tunnel dead, resolving
@@ -153,7 +153,7 @@ ERROR inbound/vless[vless-in]: TLS handshake: REALITY: failed to dial dest:
 So the relay stopped accepting clients at all, not just non-RU traffic. On `ru-2` plaintext
 `9.9.9.9:53/udp` was blocked too, which killed the `bootstrap` resolver the exit outbounds used.
 
-**Fix applied.** Working exits only (`ebac_forward` → am-1; dimonb `ru-2` → new `forward-via-ru0`
+**Fix applied.** Working exits only (`work_forward` → am-1; personal `ru-2` → new `forward-via-ru0`
 group so it hops through `ru-0`, which still reaches ie-0 — note `forward-nonru` is shared with
 `ru-0` itself, so a separate group is required to avoid a self-loop), `forward-il` dropped from
 `ru-1` (no live IL upstream; `.il` falls back to `direct-out`), plus all **dial-time** resolvers

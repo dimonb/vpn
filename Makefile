@@ -1,6 +1,4 @@
 SHELL := /bin/bash
-URL := "https://rohoscsnhb.execute-api.eu-west-1.amazonaws.com/default/vpn"
-
 # Profile Configuration Examples:
 # make deploy ENV_FILE=.env.prod CONFIG_FILE=config.prod.json SERVERS_FILE=servers.prod.cfg
 # make cfgapp-dev ENV_FILE=.env.dev CONFIG_FILE=config.dev.json
@@ -34,6 +32,9 @@ XRAY_PRIVATEKEY ?= ""
 XRAY_PUBLICKEY ?= ""
 XRAY_VERIFY ?= ""
 CONFIG_HOST ?= "fake.host"
+# Extra hosts serving hand-edited RULE-SET/NETSET lists (comma-separated). CONFIG_HOST and
+# API_HOST already count; this is for anything else that must refresh in seconds, not a day.
+LIST_CACHE_OWN_HOSTS ?= ""
 
 CONFIG_FILE ?= "config.json"
 SERVERS_FILE ?= "servers.cfg"
@@ -43,7 +44,7 @@ TEST_ONLY ?= ""
 
 # Common Ansible arguments
 ANSIBLE_ARGS := -i $(SERVERS_FILE) --ssh-extra-args='-o ControlPersist=60s'$(if $(filter-out "",$(TEST_ONLY)), --limit $(TEST_ONLY),)
-ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "vless_port=$(VLESS_PORT)" -e "reality_private_key=$(REALITY_PRIVATE_KEY)" -e "reality_public_key=$(REALITY_PUBLIC_KEY)" -e "reality_short_id=$(REALITY_SHORT_ID)" -e "xray_mldsa65seed=$(XRAY_MLDSA65SEED)" -e "xray_privatekey=$(XRAY_PRIVATEKEY)" -e "xray_publickey=$(XRAY_PUBLICKEY)" -e "xray_verify=$(XRAY_VERIFY)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$${METRICS_PWD:-}" -e "config_file=$(CONFIG_FILE)"
+ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "vless_port=$(VLESS_PORT)" -e "reality_private_key=$(REALITY_PRIVATE_KEY)" -e "reality_public_key=$(REALITY_PUBLIC_KEY)" -e "reality_short_id=$(REALITY_SHORT_ID)" -e "xray_mldsa65seed=$(XRAY_MLDSA65SEED)" -e "xray_privatekey=$(XRAY_PRIVATEKEY)" -e "xray_publickey=$(XRAY_PUBLICKEY)" -e "xray_verify=$(XRAY_VERIFY)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$${METRICS_PWD:-}" -e "config_file=$(CONFIG_FILE)" -e "list_cache_own_hosts=$(LIST_CACHE_OWN_HOSTS)"
 
 # Upstream images that live on a registry unreachable from Russian networks, mirrored
 # into docker.io/dimonb/*. Format: <source>=<target>.
@@ -58,7 +59,7 @@ install-docker:
 # them without the tunnel. Registry-to-registry, no docker daemon needed; the whole
 # multi-arch index is copied, so the mirrored digest equals the upstream one.
 # Run this (and bump the tag in vpn/docker-compose.yml.j2) after an upstream version bump.
-# Needs `brew install crane` and `crane auth login index.docker.io -u dimonb`.
+# Needs `brew install crane` and `crane auth login index.docker.io -u <docker-hub-user>`.
 mirror-images:
 	@command -v crane >/dev/null 2>&1 || { echo "ERROR: crane not found — brew install crane"; exit 1; }
 	@set -e; for pair in $(MIRROR_IMAGES); do \

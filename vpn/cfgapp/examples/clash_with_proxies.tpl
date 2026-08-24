@@ -40,17 +40,17 @@ rules:
   # check vpn connected
   - DOMAIN-SUFFIX,whatismyipaddress.com,PROXY
 
-  - RULE-SET,https://s.dimonb.com/lists/rutracker.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/binance.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/zoom.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/google.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/meta.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/telegram.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/twitter.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/tiktok.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/whatsapp.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/chatgpt.list,PROXY
-  - RULE-SET,https://s.dimonb.com/lists/apple-private.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/rutracker.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/binance.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/zoom.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/google.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/meta.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/telegram.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/twitter.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/tiktok.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/whatsapp.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/chatgpt.list,PROXY
+  - RULE-SET,https://lists.example.net/lists/apple-private.list,PROXY
 
   # всё остальное напрямую
   - MATCH,DIRECT

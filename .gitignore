@@ -10,9 +10,9 @@ servers.cfg
 vpn/users.json
 __pycache__
 config.json
-config.ebac.json
-servers.ebac.cfg
-.env.ebac
+config.*.json
+servers.*.cfg
+.env.*
 .env.local
 *.local.*
 .DS_Store

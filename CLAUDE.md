@@ -101,13 +101,13 @@ Collections needed: **`ansible.posix`** (`synchronize`) *and* **`community.gener
 A brand-new host needs its key first — `ssh-keyscan -T 10 <host> >> ~/.ssh/known_hosts` — otherwise
 every task dies with `Host key verification failed`.
 
-**Inventory is `servers.cfg` (dimonb) / `servers.ebac.cfg` (ebac)** — there is no `hosts.yml`.
+**Inventory is `servers.cfg` (personal) / `servers.work.cfg` (work)** — there is no `hosts.yml`.
 Always pass a full profile triple, and `TEST_ONLY` to limit to one host:
 ```bash
 make install-docker                          # install Docker on remote hosts
-make deploy ENV_FILE=.env.ebac CONFIG_FILE=config.ebac.json SERVERS_FILE=servers.ebac.cfg TEST_ONLY=ru-1
+make deploy ENV_FILE=.env.work CONFIG_FILE=config.work.json SERVERS_FILE=servers.work.cfg TEST_ONLY=ru-1
 ```
-No `make logs` target — read logs over ssh (`docker logs --since 10m vpn-sing-box-1`; `ubuntu@`+`sudo` on ebac hosts except am-1).
+No `make logs` target — read logs over ssh (`docker logs --since 10m vpn-sing-box-1`); the SSH user is per-profile (`root` or `ubuntu`+`sudo`), see the inventory.
 
 ### 6. Code Style
 
@@ -215,7 +215,7 @@ Examples:
 
 ### 12. Gotchas That Cost Time
 
-- `.env*`, `config.json`, `config.ebac.json`, `servers*.cfg` are **gitignored local secrets** — edits there never appear in `git status`/`git diff`.
+- `.env*`, `config.json`, `config.work.json`, `servers*.cfg` are **gitignored local secrets** — edits there never appear in `git status`/`git diff`.
 - Clients enter on **:443** (caddy layer4 routes by TLS SNI → sing-box vless-in :8443, xray :28443). Port 8443 is not reachable externally — end-to-end tests must target :443.
 - Validate a rendered template without deploying: `ansible <host> -i <inv> -e "salt=…" -m debug -a 'msg={{ lookup("template","vpn/sing-box.json.j2") }}'`
 - A relay whose tunnel is down cannot pull from Docker Hub, so `make deploy` fails at *Build docker-compose apps* **after** writing new configs — `docker compose restart sing-box` on the relay, then re-run the deploy.
@@ -224,8 +224,8 @@ Examples:
 
 ### 13. Adding a VPN host
 
-1. Inventory line in `servers.cfg` / `servers.ebac.cfg` (gitignored, local only).
-2. `subs` entry in `config.json` / `config.ebac.json` (gitignored): put it in a relay's forward
+1. Inventory line in `servers.cfg` / `servers.work.cfg` (gitignored, local only).
+2. `subs` entry in `config.json` / `config.work.json` (gitignored): put it in a relay's forward
    group to make it an upstream, in a client group to advertise it to clients.
 3. **DNS A record must resolve before the deploy** — caddy takes an ACME cert on the host name, so
    a missing record fails the run. (Where the zone is managed: see local notes / `AGENTS.md`.)

@@ -23,9 +23,9 @@ class TestSubscriptionPage:
             "users": ["dimonb", "testuser"],
             "subs": {
                 "default": {
-                    "DE_1_CONTABO": {
+                    "DE_1": {
                         "protocol": "hy2",
-                        "host": "de-1.contabo.v.dimonb.com",
+                        "host": "de-1.example.net",
                     }
                 }
             },
