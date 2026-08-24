@@ -126,9 +126,11 @@ resolver (`route.default_domain_resolver`, each exit outbound's `domain_resolver
 - **Per-site quirks** (a Russian site that's slow through the tunnel, or a censored site that must
   bypass the DPI): see AGENTS.md → "Per-site routing". RU-IP sites go in the `domain-ru` rule_set
   (direct + local resolve); censored + Cloudflare-fronted sites are pinned to an exit.
-- Last applied: 2026-08-23 — see the incident below. ebac `ru-1` → **am-1 only**; dimonb `ru-2` →
-  **ru-0** (Yandex) → ie-0; dimonb `ru-0` → ie-0 (unaffected). `fanfics.me`→direct,
-  `ficbook.net`→am-1 (ebac).
+- Last applied: 2026-08-24 — dimonb `ru-0` → **ie-0 + de-2.oracle** (Frankfurt, added so the
+  urltest finally has something to fail over to); `ru-2` → **ru-0** (Yandex) → those two, because
+  kvmka drops QUIC to Oracle as well as to AWS — Yandex reaches both. ebac `ru-1` → **am-1 only**
+  (still single-exit). `fanfics.me`→direct, `ficbook.net`→am-1 (ebac).
+- Previously: 2026-08-23 — see the incident below.
 - Previously: 2026-07-03 — ebac `ru-1` → fr-2/de-2/am-1/il-1; dimonb `ru-2` → ie-0.
 
 ## Incident 2026-08-17/19 — Hysteria2 blocked to AWS, and a DNS deadlock on top

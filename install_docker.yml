@@ -14,6 +14,9 @@
         - curl
         - gnupg
         - software-properties-common
+        # deploy_vpn.yml syncs cfgapp with ansible.posix.synchronize (rsync), and the
+        # Ubuntu *Minimal* cloud images (Oracle's default) ship without it.
+        - rsync
 
     - name: Ensure keyrings directory exists
       file:

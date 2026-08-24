@@ -436,6 +436,33 @@ on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless out
              relays")
 ```
 
+## Adding a host on Oracle Cloud (de-2.oracle, added 2026-08-24)
+
+The tenancy is driven with the `oci` CLI from a repo-local venv (`./.venv-oci/bin/oci`,
+gitignored); credentials live in `~/.oci/config` + `~/.oci/oci_api_key.pem`. Four things OCI
+does differently from every other provider in this fleet:
+
+- **No public IP by default.** A new instance only gets a private address; assign one with
+  `oci network public-ip create --lifetime EPHEMERAL --private-ip-id <primary-private-ip-ocid>`
+  (get it from `oci compute instance list-vnics` → `oci network private-ip list`).
+- **Two firewalls.** The VCN security list / NSG allows only 22 — add ingress for 80,443/tcp and
+  47012,47013/udp (`oci network nsg rules add` is additive; a security-list update replaces the
+  whole rule set, so prefer the NSG). *And* the image's own iptables ends in
+  `REJECT --reject-with icmp-host-prohibited`, so insert the same ports before that rule and
+  `netfilter-persistent save`.
+- **The Ubuntu image is *Minimal*.** It ships without `rsync`, which `deploy_vpn.yml` needs for
+  the cfgapp sync (`install_docker.yml` now installs it). Default user is `ubuntu`; the personal
+  inventory connects as `root`, so copy `authorized_keys` to `/root/.ssh` and set
+  `PermitRootLogin prohibit-password`.
+- **1 GB RAM on the free E2.1.Micro shape** → add the fleet-standard 4 GB `/swapfile` + fstab
+  entry (`ie-0` is the same size and does the same). All stack images have arm64 variants too, so
+  an Ampere A1 shape works if capacity allows.
+
+DNS for `*.v.dimonb.com` is OpenTofu + Cloudflare in the **k8s-dibot** repo (`dns/dimonb.com.tf`,
+state in R2): add a `cloudflare_dns_record`, `make plan-dns`, `make deploy-dns`; CI re-applies on
+merge. Host monitoring lives in the same repo — `kustomize/gatus/config/vpn.yaml` (telegram
+alerts).
+
 ## Gotchas
 
 - **`ssh` is aliased to kitty's ssh-kitten** in this environment → use **`/usr/bin/ssh`** / `/usr/bin/scp` for non-interactive commands.
@@ -446,6 +473,10 @@ on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless out
   `docker run --rm --entrypoint sing-box -v /path/sing-box.json:/c.json -v /path/cert:/etc/xray/certs itdoginfo/sing-box:v1.12.12 check -c /c.json`
 - The `error reading bcrypt version` traceback during `make deploy` (passlib/bcrypt on macOS) is **non-fatal** — the caddy template still renders. A *fatal* `password cannot be longer than 72 bytes` from the same area means bcrypt ≥ 4.1 — see [The deploy toolchain lives on the operator's laptop](#the-deploy-toolchain-lives-on-the-operators-laptop).
 - **Never `docker system prune` / `docker image prune -a` on a RU host** — RU egress to registries is fragile and the stack cannot start without its images: [ghcr.io is unreachable from RU hosts](#ghcrio-is-unreachable-from-ru-hosts-images-are-mirrored-to-docker-hub).
+- **`Error opening terminal: xterm-ghostty`** on a host = its terminfo db predates Ghostty. Fix per
+  host: `infocmp -x xterm-ghostty | ssh <host> 'sudo tic -x -o /usr/share/terminfo -'` (installed
+  fleet-wide 2026-08-24). If `tic` silently does nothing, check `df -h /` — a full disk fails
+  quietly here.
 - **Bumping the xray version means two edits**: the tag in `vpn/docker-compose.yml.j2` *and* `MIRROR_IMAGES` in the Makefile, then `make mirror-images` — RU hosts pull the mirror, not ghcr.io.
 
 ## Common tasks → runbooks
