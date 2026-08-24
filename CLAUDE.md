@@ -95,8 +95,11 @@ python compact_networks.py input.txt output.txt \
 
 **Ansible is not on PATH** — it lives in a repo-local venv:
 ```bash
-export PATH="$PWD/.venv-ansible/bin:$PATH"   # ansible-core + ansible.posix + bcrypt<4.1
+export PATH="$PWD/.venv-ansible/bin:$PATH"   # ansible-core + bcrypt<4.1 + passlib
 ```
+Collections needed: **`ansible.posix`** (`synchronize`) *and* **`community.general`** (`modprobe`).
+A brand-new host needs its key first — `ssh-keyscan -T 10 <host> >> ~/.ssh/known_hosts` — otherwise
+every task dies with `Host key verification failed`.
 
 **Inventory is `servers.cfg` (dimonb) / `servers.ebac.cfg` (ebac)** — there is no `hosts.yml`.
 Always pass a full profile triple, and `TEST_ONLY` to limit to one host:
@@ -216,6 +219,21 @@ Examples:
 - Clients enter on **:443** (caddy layer4 routes by TLS SNI → sing-box vless-in :8443, xray :28443). Port 8443 is not reachable externally — end-to-end tests must target :443.
 - Validate a rendered template without deploying: `ansible <host> -i <inv> -e "salt=…" -m debug -a 'msg={{ lookup("template","vpn/sing-box.json.j2") }}'`
 - A relay whose tunnel is down cannot pull from Docker Hub, so `make deploy` fails at *Build docker-compose apps* **after** writing new configs — `docker compose restart sing-box` on the relay, then re-run the deploy.
+- A full disk fails **silently** here (`scp` → `write remote … Failure`, `tic` doing nothing at all). Check `df -h /` early; `docker builder prune -af` is the usual win. Never `system prune -a` on a RU host.
+- A `urltest` pool with one member has **no failover** — one upstream hiccup is a total outage. Before blaming a relay, count the exits in its forward group.
+
+### 13. Adding a VPN host
+
+1. Inventory line in `servers.cfg` / `servers.ebac.cfg` (gitignored, local only).
+2. `subs` entry in `config.json` / `config.ebac.json` (gitignored): put it in a relay's forward
+   group to make it an upstream, in a client group to advertise it to clients.
+3. **DNS A record must resolve before the deploy** — caddy takes an ACME cert on the host name, so
+   a missing record fails the run. (Where the zone is managed: see local notes / `AGENTS.md`.)
+4. Add it to host monitoring, or it is invisible when it dies.
+5. `make install-docker TEST_ONLY=<host>` → `make deploy TEST_ONLY=<host>`.
+
+Cloud-provider quirks (missing public IP, layered firewalls, Minimal images without `rsync`, swap
+on 1 GB shapes) are collected in `AGENTS.md`.
 
 ## Additional Resources
 
