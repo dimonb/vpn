@@ -233,6 +233,9 @@ Examples:
 - On a fresh relay `make deploy` prints `fatal: … Timeout when waiting for 172.29.77.1:1080` ("Probe the relay tunnel proxy") — expected and ignored: the tunnel only exists after compose.
 - The relay tunnel proxy (`172.29.77.1:1080`, sing-box `cfgapp-in`) needs auth — curl gets `407` / `(97) No authentication method`. Real end-to-end check on the relay: `curl -x "socks5h://<user>:<pass>@172.29.77.1:1080" https://api.ipify.org` with creds from `cfgapp-in.users` in the rendered `sing-box.json` (should print the exit's IP).
 - UDP across some RU↔foreign borders is routed **per flow**: the same two hosts can be 40 ms or 110 ms + loss depending on the port pair, while ping looks clean. For a single-flow UDP tunnel, scan source ports (`wg set <if> listen-port <p>` + ping over the tunnel) and pin the best.
+- VPN proxies **reject** loopback/private/link-local destinations (sing-box `ip_is_private → reject`, hysteria ACL) — so a client can't reach the host's local services. `000` for `127.0.0.1`/`10.x` through the tunnel proxy is intended; don't "fix" it back to `direct-out`.
+- Caddy's admin API is disabled — config changes apply only by recreating the container (every deploy does `up --force-recreate`); there is no `caddy reload`.
+- Test hysteria (:47013) from the host itself: run a throwaway sing-box client (`docker run --network host <sing-box image> sing-box run -c c.json`, hysteria2 outbound to `127.0.0.1:47013` with user/pass + salamander from the rendered `hysteria.yaml`, mixed inbound on `127.0.0.1:18080`) and curl through `socks5h://127.0.0.1:18080`.
 
 ### 13. Adding a VPN host
 
