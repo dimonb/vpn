@@ -259,7 +259,10 @@
        could not even complete the vless handshake (outage 2026-08-17..23). #}
     "default_domain_resolver": { "server": "{{ 'local-dns' if relay else 'quad9-doh' }}" },
     "rules": [
-      { "ip_is_private": true, "outbound": "direct-out" },
+      {# Reject, never dial: a client asking for 127.0.0.1 / a private / link-local address would
+         otherwise land on THIS host's local-only services (caddy admin, exporters, FreeSWITCH
+         ESL, the cloud metadata endpoint). Nothing legitimate reaches private space via a proxy. #}
+      { "ip_is_private": true, "action": "reject" },
       {% if forward_group and config.subs.get(forward_group) %}
       { "inbound": "cfgapp-in", "outbound": "auto" },
       {% endif %}

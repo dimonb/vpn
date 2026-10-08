@@ -1,4 +1,7 @@
+{# Admin API off: every deploy recreates the container, so nothing needs live reloads, and an
+   open 127.0.0.1:2019 lets anyone who reaches the host's loopback rewrite the whole config. #}
 {
+  "admin": { "disabled": true },
   "logging": {
     "logs": {
       "default": { "level": "DEBUG" },

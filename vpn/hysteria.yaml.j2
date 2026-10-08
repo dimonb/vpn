@@ -20,3 +20,19 @@ obfs:
 
 trafficStats:
   listen: 127.0.0.1:8451
+
+# Clients must not reach this host's local-only services (exporters, admin endpoints, cloud
+# metadata) by asking for loopback / private / link-local addresses. Same rule as sing-box.
+acl:
+  inline:
+    - reject(0.0.0.0/8)
+    - reject(10.0.0.0/8)
+    - reject(100.64.0.0/10)
+    - reject(127.0.0.0/8)
+    - reject(169.254.0.0/16)
+    - reject(172.16.0.0/12)
+    - reject(192.168.0.0/16)
+    - reject(::1/128)
+    - reject(fc00::/7)
+    - reject(fe80::/10)
+    - direct(all)
