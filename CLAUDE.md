@@ -229,6 +229,10 @@ Examples:
 - A relay whose tunnel is down cannot pull from Docker Hub, so `make deploy` fails at *Build docker-compose apps* **after** writing new configs — `docker compose restart sing-box` on the relay, then re-run the deploy.
 - A full disk fails **silently** here (`scp` → `write remote … Failure`, `tic` doing nothing at all). Check `df -h /` early; `docker builder prune -af` is the usual win. Never `system prune -a` on a RU host.
 - A `urltest` pool with one member has **no failover** — one upstream hiccup is a total outage. Before blaming a relay, count the exits in its forward group.
+- A relay whose forward group points at another relay shares that relay's fate — when the upstream relay dies, the chained one has no exit either.
+- On a fresh relay `make deploy` prints `fatal: … Timeout when waiting for 172.29.77.1:1080` ("Probe the relay tunnel proxy") — expected and ignored: the tunnel only exists after compose.
+- The relay tunnel proxy (`172.29.77.1:1080`, sing-box `cfgapp-in`) needs auth — curl gets `407` / `(97) No authentication method`. Real end-to-end check on the relay: `curl -x "socks5h://<user>:<pass>@172.29.77.1:1080" https://api.ipify.org` with creds from `cfgapp-in.users` in the rendered `sing-box.json` (should print the exit's IP).
+- UDP across some RU↔foreign borders is routed **per flow**: the same two hosts can be 40 ms or 110 ms + loss depending on the port pair, while ping looks clean. For a single-flow UDP tunnel, scan source ports (`wg set <if> listen-port <p>` + ping over the tunnel) and pin the best.
 
 ### 13. Adding a VPN host
 
