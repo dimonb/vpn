@@ -7,7 +7,7 @@
 {% set relay = (forward_group and config.subs.get(forward_group)) %}
 services:
   xray:
-    # Mirror of ghcr.io/xtls/xray-core:26.2.6 (byte-identical index, same digest).
+    # Mirror of ghcr.io/xtls/xray-core:26.10.31 (byte-identical index, same digest).
     # ghcr.io is blocked from Russian networks, docker.io is not — pulling upstream
     # directly makes every RU deploy depend on the sing-box tunnel already being up,
     # which a fresh host does not have. Re-mirror after a version bump: `make mirror-images`.
@@ -16,11 +16,20 @@ services:
     # sing-box-based apps. Re-test with a sing-box client before bumping.
     image: dimonb/xray-core:26.2.6
     restart: unless-stopped
+    # Host network: hy2 is UDP (no userland docker-proxy in the path, real client IPs), and
+    # every TCP inbound listens on 127.0.0.1 behind caddy.
+    network_mode: host
+    # The image runs as uid 65532, but caddy keeps its private keys 0600 root; the hy2 inbound
+    # reads the key in place (so renewals apply), hence root — as sing-box and caddy already run.
+    user: root
     volumes:
       - ./xray.json:/etc/xray/config.json:ro
+      # Caddy's certificate storage: the hy2 inbound uses the host's Let's Encrypt
+      # certificate; Xray re-reads the files, so caddy's renewals are picked up.
+      - ./caddy:/caddy:ro
     command: ["run", "-c", "/etc/xray/config.json"]
-    ports:
-      - "127.0.0.1:28443:28443"
+    depends_on:
+      - proxy
   sing-box:
     image: itdoginfo/sing-box:v1.14.4
     environment:
@@ -82,6 +91,12 @@ services:
       - XRAY_PRIVATEKEY={{ xray_privatekey }}
       - XRAY_PUBLICKEY={{ xray_publickey }}
       - XRAY_VERIFY={{ xray_verify }}
+      - XHTTP_PATH={{ xhttp_path | default('') }}
+      - XHTTP_MODE={{ xhttp_mode | default('') }}
+      - XRAY_HY2_PORT={{ xray_hy2_port | default('') }}
+      - HY2_PACKET_SIZE={{ hy2_packet_size | default('') }}
+      - PROFILE_UPDATE_INTERVAL={{ profile_update_interval | default('') }}
+      - PROFILE_TITLE={{ profile_title | default('') }}
       - SALT={{ salt }}
       - IPV4_BLOCK_PREFIX=18
       - IPV6_BLOCK_PREFIX=32

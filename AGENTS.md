@@ -436,7 +436,70 @@ on a RELAY: inbound ─▶ route rules ─▶ auto(urltest) ─▶ hy2/vless out
             (DNS on relays is split traffic-vs-dialing: destination lookups → DoH via the tunnel
              (RU domains → local), dialing/REALITY dest → local resolver — see "DNS resolution on
              relays")
+
+XHTTP (when XHTTP_PATH is set):
+client ──443, SNI = the host's own name──▶ caddy l4 default ─▶ :4443 (LE certificate)
+          └─ path /<XHTTP_PATH>/* ─▶ h2c 127.0.0.1:XHTTP_PORT (xray xhttp-in)
+             ├─ relay entry: id = sha256("<user>.<exit>.<SALT>") ─▶ to-<exit>
+             │     (VLESS + REALITY www.icloud.com, account `system`) ─▶ EXIT ─▶ internet
+             │     RU destinations ─▶ direct here; an id with no exit ─▶ blocked
+             └─ otherwise: id = sha256("<user>.<SALT>") ─▶ direct (this host is the exit)
+client ──UDP XRAY_HY2_PORT──▶ xray hy2-in (Hysteria2, LE certificate, Salamander/Gecko) ─▶ direct
 ```
+
+## XHTTP entry, the relay on Xray, and the mihomo subscription
+
+Optional, off unless `XHTTP_PATH` (and for hy2 `XRAY_HY2_PORT`) is set in the ENV_FILE; a profile
+that sets neither renders exactly as before apart from Xray's own move (below).
+
+**Why an entry in Russia, and why its own name.** Measured 2026-11 from a Russian home ISP: TLS to
+addresses of large cloud providers (several regions) *freezes after 16 KB* when the SNI is
+not on the DPI's allow-list — the handshake and small pages pass, then the flow stalls (exactly
+16384 bytes of a 300 KB response, 3/3). REALITY with a big-brand SNI (`www.icloud.com`) avoids the
+freeze but has 1–3 of 3 handshakes dropped (SNI/IP mismatch filtering). A host on a Russian network
+under its **own name** with a real certificate passes full-size responses 3/3. So users enter on the
+Russian host with XHTTP under its own name, and the exits are reached datacenter-to-datacenter over
+the existing REALITY inbound. **Test a new host with a response larger than 16 KB** (a TLS handshake
+or `/health` proves nothing): e.g. `curl --interface <phys-if> --resolve <host>:443:<ip>
+https://<host>/<a template path>` must return the full body.
+
+**Configuration.** Regions are subscription entries; the relay derives everything from them:
+
+```json
+"subs": { "regions": {
+  "🇩🇪 Germany": {"protocol": "xhttp", "host": "<entry host>", "exit": "<exit host>"}
+} }
+```
+
+- On `<entry host>` (`ansible_host` equal to `host`), `xray.json.j2` renders one `xhttp-in` client per
+  user per exit (email `<user>@<exit>`), one `to-<exit>` outbound per exit, and routing by user. RU
+  destinations leave the entry directly; anything unmatched is blocked, never sent out from the entry.
+- `cfgapp` renders the same entries for mihomo (`protocol: xhttp` → `type: vless`, `network: xhttp`,
+  `servername` = the entry host, the per-exit id), so the server and the subscription cannot drift.
+- An `xhttp` entry **without** `exit` is a direct exit on its own host (per-user id). `hy2-xray`
+  entries are Hysteria2 on `XRAY_HY2_PORT` of that host (direct only — do not enable it on the
+  relay entry, its traffic would leave there).
+- The exits need nothing new: their REALITY inbound and the `system` account already exist.
+
+**Subscription.** One mihomo YAML per user from a `#CLASH,AUTH` template (in the template repo, e.g.
+`<name>.yaml.tpl`): `https://<entry host>/<name>.yaml?u=<user>&hash=<sha256("<user>.<SALT>")>&sub=regions`.
+`PROFILE_UPDATE_INTERVAL` sends `profile-update-interval` (hours; mihomo clients refresh on it —
+Clash Mi only when "prefer the profile's interval" is on), `PROFILE_TITLE` the profile name.
+
+**Xray's container changed** (all profiles): `network_mode: host` (hy2 is UDP; every TCP inbound is on
+127.0.0.1 behind caddy), `user: root` (the image runs as uid 65532, caddy's keys are 0600 root and the
+hy2 inbound reads them in place so renewals apply), `./caddy` mounted read-only, image 26.10.31 —
+**run `make mirror-images` before the first deploy** so RU hosts can pull it. The REALITY inbound
+listens on 127.0.0.1 (`xray_reality_port`, default 28443), as caddy dials it. `deploy_vpn.yml` sets
+`net.core.{r,w}mem_max` to 16 MB (hy2 asks for 7 MB socket buffers).
+
+**Testing without production credentials** (how this was verified): render with throwaway values,
+run the rendered xray on a spare host next to the live one (`xray_reality_port`/`xhttp_port`
+overrides avoid clashes), point the relay at a *mock exit* (a second xray with a REALITY inbound,
+throwaway keys, account `system`, `https_port` override) and check: each region id reaches the
+exit, a plain per-user id is refused (`invalid request user id`), RU names go direct. `xray run
+-test` needs the certificate mounted and `--user root`. Then feed cfgapp's YAML to mihomo
+(`mihomo -t`, then select each region via the API and fetch through it).
 
 ## Adding a host on Oracle Cloud
 

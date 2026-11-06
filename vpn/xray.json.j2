@@ -1,4 +1,22 @@
 {% set config = lookup('file', config_file | default('config.json')) | from_json %}
+{#- Optional user transports, each enabled by its own variable (empty = off), so a profile that
+    does not set them renders exactly as before:
+    - xhttp_path: VLESS + XHTTP on loopback; caddy terminates TLS on :443 (the host's own name and
+      Let's Encrypt certificate) and forwards /<xhttp_path>/ here as h2c.
+    - xray_hy2_port: Hysteria2 on that UDP port, with the same Let's Encrypt certificate (caddy's
+      storage, mounted read-only) and Salamander; hy2_packet_size turns on Gecko. #}
+{% set xhttp_path = xhttp_path | default('') | string %}
+{% set xray_hy2_port = xray_hy2_port | default('') | string %}
+{% set hy2_packet_size = hy2_packet_size | default('') | string %}
+{% set le_dir = '/caddy/caddy/certificates/acme-v02.api.letsencrypt.org-directory/' + ansible_host %}
+{#- Relay entry: subscription entries `{"protocol": "xhttp", "host": <this host>, "exit": <exit>}`
+    make this host the users' only entry. Every user gets one VLESS id per exit
+    (sha256("<user>.<exit>.<SALT>"), email "<user>@<exit>"), and the id picks the exit: Xray
+    routes it over VLESS + REALITY (the exits' existing inbound, account `system`) to that exit.
+    Russian ISPs only ever see this host; the exits' addresses never meet the Russian DPI. #}
+{% set relay_exits = [] %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host and _it.get('exit') and _it.exit not in relay_exits %}{% set _ = relay_exits.append(_it.exit) %}{% endif %}{% endfor %}{% endfor %}
+{% macro vless_id(seed) %}{{ seed | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}{% endmacro %}
 {
   "log": {
     "access": "none",
@@ -23,14 +41,37 @@
           "bittorrent"
         ],
         "type": "field"
-      }
+      }{% if xhttp_path and relay_exits %},
+      {# Russian destinations leave here (clients normally send them direct already). #}
+      {
+        "inboundTag": ["xhttp-in"],
+        "domain": ["domain:ru", "domain:su", "domain:xn--p1ai", "geosite:category-ru"],
+        "outboundTag": "direct"
+      },
+      {
+        "inboundTag": ["xhttp-in"],
+        "ip": ["geoip:ru"],
+        "outboundTag": "direct"
+      },
+      {% for exit in relay_exits %}
+      {
+        "inboundTag": ["xhttp-in"],
+        "user": [{% for user in config.users %}"{{ user }}@{{ exit }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        "outboundTag": "to-{{ exit }}"
+      },
+      {% endfor %}
+      {# Fail closed: a relay user that matched no exit never leaves from this host. #}
+      {
+        "inboundTag": ["xhttp-in"],
+        "outboundTag": "blocked"
+      }{% endif %}
     ]
   },
   "dns": null,
   "inbounds": [
     {
-      "listen": "0.0.0.0",
-      "port": 28443,
+      "listen": "127.0.0.1",
+      "port": {{ xray_reality_port | default(28443) }},
       "protocol": "vless",
       "settings": {
         "clients": [
@@ -97,14 +138,114 @@
         "metadataOnly": false,
         "routeOnly": true
       }
-    }
+    }{% if xhttp_path %},
+    {
+      "tag": "xhttp-in",
+      "listen": "127.0.0.1",
+      "port": {{ xhttp_port | default(28480) }},
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {% if relay_exits %}
+          {% for exit in relay_exits %}{% set outer = loop %}{% for user in config.users %}
+          { "email": "{{ user }}@{{ exit }}", "id": "{{ vless_id(user + '.' + exit + '.' + salt) }}" }{% if not (loop.last and outer.last) %},{% endif %}
+          {% endfor %}{% endfor %}
+          {% else %}
+          {% for user in config.users %}
+          { "email": "{{ user }}", "id": "{{ vless_id(user + '.' + salt) }}" }{% if not loop.last %},{% endif %}
+          {% endfor %}
+          {% endif %}
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "none",
+        "xhttpSettings": {
+          "path": "/{{ xhttp_path }}",
+          "mode": "auto"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      }
+    }{% endif %}{% if xray_hy2_port %},
+    {
+      "tag": "hy2-in",
+      "listen": "0.0.0.0",
+      "port": {{ xray_hy2_port }},
+      "protocol": "hysteria",
+      "settings": {
+        "version": 2,
+        "clients": [
+          {% for user in config.users %}
+          {
+            "email": "{{ user }}",
+            "auth": "{{ (user + '.' + salt) | hash('sha256') }}"
+          }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        ]
+      },
+      "streamSettings": {
+        "network": "hysteria",
+        "hysteriaSettings": {
+          "version": 2,
+          "udpIdleTimeout": 60,
+          {# Someone with the obfs password but no account gets an empty 404, like any wrong
+             path on :443 — not a borrowed site under our name. #}
+          "masquerade": { "type": "string", "content": "", "statusCode": 404 }
+        },
+        "security": "tls",
+        "tlsSettings": {
+          "serverName": "{{ ansible_host }}",
+          "rejectUnknownSni": true,
+          "minVersion": "1.3",
+          "alpn": ["h3"],
+          "certificates": [
+            {
+              "certificateFile": "{{ le_dir }}/{{ ansible_host }}.crt",
+              "keyFile": "{{ le_dir }}/{{ ansible_host }}.key",
+              "ocspStapling": 0,
+              "oneTimeLoading": false
+            }
+          ]
+        },
+        "finalmask": {
+          "udp": [
+            {
+              "type": "salamander",
+              "settings": {
+                "password": "{{ obfs_password }}"{% if hy2_packet_size %},
+                "packetSize": "{{ hy2_packet_size }}"{% endif %}
+              }
+            }
+          ],
+          "quicParams": { "congestion": "bbr", "bbrProfile": "aggressive" }
+        },
+        {# quic-go never grows its own socket buffers behind finalmask; at the kernel default
+           the socket drops packets under load. 7 MB each way (SO_RCVBUF=8, SO_SNDBUF=7); needs
+           net.core.rmem_max/wmem_max >= 7 MB, which deploy_vpn.yml sets. #}
+        "sockopt": {
+          "customSockopt": [
+            { "system": "linux", "type": "int", "level": "1", "opt": "8", "value": "7340032" },
+            { "system": "linux", "type": "int", "level": "1", "opt": "7", "value": "7340032" }
+          ]
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      }
+    }{% endif %}
   ],
   "outbounds": [
     {
       "protocol": "freedom",
       "settings": {
         "domainStrategy": "AsIs",
-        "noises": [],
         "redirect": ""
       },
       "tag": "direct"
@@ -113,7 +254,37 @@
       "protocol": "blackhole",
       "settings": {},
       "tag": "blocked"
-    }
+    }{% if xhttp_path %}{% for exit in relay_exits %},
+    {
+      "tag": "to-{{ exit }}",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "{{ exit }}",
+            "port": {{ https_port | default(443) }},
+            "users": [
+              {
+                "id": "{{ vless_id('system.' + salt) }}",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "www.icloud.com",
+          "fingerprint": "chrome",
+          "publicKey": "{{ xray_publickey }}",
+          "shortId": "3e3e"{% if xray_verify | default('') %},
+          "mldsa65Verify": "{{ xray_verify }}"{% endif %}
+        }
+      }
+    }{% endfor %}{% endif %}
   ],
   "transport": null,
   "policy": {

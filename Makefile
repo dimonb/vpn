@@ -42,13 +42,18 @@ SERVERS_FILE ?= "servers.cfg"
 # Test mode - limit to specific instance
 TEST_ONLY ?= ""
 
+# Optional Xray user transports and mihomo subscription headers (env.example). Read from the
+# sourced ENV_FILE in the recipe's shell, so values may contain spaces (PROFILE_TITLE). Empty =
+# feature off: the templates then render as before.
+XRAY_ENV_ARGS := -e "xhttp_path=$${XHTTP_PATH:-}" -e "xhttp_port=$${XHTTP_PORT:-28480}" -e "xhttp_mode=$${XHTTP_MODE:-}" -e "xray_hy2_port=$${XRAY_HY2_PORT:-}" -e "hy2_packet_size=$${HY2_PACKET_SIZE:-}" -e "profile_update_interval=$${PROFILE_UPDATE_INTERVAL:-}" -e "profile_title=$${PROFILE_TITLE:-}"
+
 # Common Ansible arguments
 ANSIBLE_ARGS := -i $(SERVERS_FILE) --ssh-extra-args='-o ControlPersist=60s'$(if $(filter-out "",$(TEST_ONLY)), --limit $(TEST_ONLY),)
-ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "vless_port=$(VLESS_PORT)" -e "reality_private_key=$(REALITY_PRIVATE_KEY)" -e "reality_public_key=$(REALITY_PUBLIC_KEY)" -e "reality_short_id=$(REALITY_SHORT_ID)" -e "xray_mldsa65seed=$(XRAY_MLDSA65SEED)" -e "xray_privatekey=$(XRAY_PRIVATEKEY)" -e "xray_publickey=$(XRAY_PUBLICKEY)" -e "xray_verify=$(XRAY_VERIFY)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$${METRICS_PWD:-}" -e "config_file=$(CONFIG_FILE)" -e "list_cache_own_hosts=$(LIST_CACHE_OWN_HOSTS)"
+ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" -e "http_port=$(HTTP_PORT)" -e "https_port=$(HTTPS_PORT)" -e "hysteria2_port=$(HYSTERIA2_PORT)" -e "hysteria2_v2_port=$(HYSTERIA2_V2_PORT)" -e "vless_port=$(VLESS_PORT)" -e "reality_private_key=$(REALITY_PRIVATE_KEY)" -e "reality_public_key=$(REALITY_PUBLIC_KEY)" -e "reality_short_id=$(REALITY_SHORT_ID)" -e "xray_mldsa65seed=$(XRAY_MLDSA65SEED)" -e "xray_privatekey=$(XRAY_PRIVATEKEY)" -e "xray_publickey=$(XRAY_PUBLICKEY)" -e "xray_verify=$(XRAY_VERIFY)" -e "config_host=$(CONFIG_HOST)" -e "metrics_pwd=$${METRICS_PWD:-}" -e "config_file=$(CONFIG_FILE)" -e "list_cache_own_hosts=$(LIST_CACHE_OWN_HOSTS)" $(XRAY_ENV_ARGS)
 
 # Upstream images that live on a registry unreachable from Russian networks, mirrored
 # into docker.io/dimonb/*. Format: <source>=<target>.
-MIRROR_IMAGES := ghcr.io/xtls/xray-core:26.2.6=dimonb/xray-core:26.2.6
+MIRROR_IMAGES := ghcr.io/xtls/xray-core:26.10.31=dimonb/xray-core:26.10.31
 
 .PHONY: install-docker check-env deploy deploy-test cn passwords ubuntu-update ubuntu-upgrade amneziawg-install mirror-images
 
@@ -96,7 +101,7 @@ check-env:
 		echo "ERROR: REALITY_SHORT_ID is not set. Please create .env file from env.example and set REALITY_SHORT_ID value"; \
 		exit 1; \
 	fi; \
-	echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT), Hysteria2-v2: $(HYSTERIA2_V2_PORT), VLESS: $(VLESS_PORT)"
+	echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT), Hysteria2-v2: $(HYSTERIA2_V2_PORT), VLESS: $(VLESS_PORT), Xray hy2: $${XRAY_HY2_PORT:-off}, XHTTP: $${XHTTP_PATH:+on}"
 
 deploy: check-env
 	@source $(ENV_FILE) 2>/dev/null || true; \

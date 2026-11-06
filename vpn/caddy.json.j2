@@ -34,7 +34,7 @@
             {
               "match": [{ "tls": { "sni": ["www.icloud.com", "icloud.com"] } }],
               "handle": [
-                { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:28443"] }] }
+                { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:{{ xray_reality_port | default(28443) }}"] }] }
               ]
             },
             {
@@ -103,6 +103,22 @@
                 }
               ]
             },
+{% if xhttp_path | default('') | string %}
+            {# VLESS + XHTTP: this host's own name and certificate on :443; only the secret path
+               reaches Xray (h2c on loopback, streamed both ways), everything else stays the
+               decoy site. Must come before the cfgapp catch-all. #}
+            {
+              "match": [{ "path": ["/{{ xhttp_path }}", "/{{ xhttp_path }}/*"] }],
+              "handle": [
+                {
+                  "handler": "reverse_proxy",
+                  "flush_interval": -1,
+                  "transport": { "protocol": "http", "versions": ["h2c"] },
+                  "upstreams": [{ "dial": "127.0.0.1:{{ xhttp_port | default(28480) }}" }]
+                }
+              ]
+            },
+{% endif %}
             {
               "match": [{ "path": ["/node/metrics*"] }],
               "handle": [

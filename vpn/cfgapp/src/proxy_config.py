@@ -1,6 +1,7 @@
 """Proxy configuration management and generation."""
 
 import base64
+import hashlib
 import io
 import json
 import logging
@@ -104,20 +105,27 @@ class ProxyConfig:
         proxy_configs = []
         subscription_proxies = self.get_subscription_proxies(sub_name)
 
-        for proxy_name, proxy_config in subscription_proxies.items():
-            protocol = proxy_config.get("protocol", "")
-            host = proxy_config.get("host", "")
+        for proxy_name, entry in subscription_proxies.items():
+            protocol = entry.get("protocol", "")
+            host = entry.get("host", "")
 
             if not protocol or not host:
                 logger.warning(f"Invalid proxy config: {proxy_name}")
                 continue
 
-            # Generate one config per proxy (not per user)
-            proxy_config = self._generate_proxy_config(
-                protocol, host, proxy_name, password, user
-            )
-            if proxy_config:
-                proxy_configs.append(proxy_config)
+            if protocol == "xhttp":
+                generated = self._generate_xhttp_config(
+                    host, proxy_name, user, entry.get("exit")
+                )
+            elif protocol == "hy2-xray":
+                generated = self._generate_hy2_xray_config(host, proxy_name, user)
+            else:
+                # Generate one config per proxy (not per user)
+                generated = self._generate_proxy_config(
+                    protocol, host, proxy_name, password, user
+                )
+            if generated:
+                proxy_configs.append(generated)
 
         logger.info(
             f"Generated {len(proxy_configs)} proxy configurations for subscription '{sub_name or 'default'}'"
@@ -157,6 +165,80 @@ class ProxyConfig:
         else:
             logger.warning(f"Unsupported protocol: {protocol}")
             return {}
+
+    @staticmethod
+    def _vless_id(seed: str) -> str:
+        """VLESS id the server templates derive: sha256(seed), first 32 hex as 8-4-4-4-12."""
+        h = hashlib.sha256(seed.encode()).hexdigest()
+        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+    def _generate_xhttp_config(
+        self, host: str, proxy_name: str, user: str | None, exit_host: str | None
+    ) -> dict[str, Any]:
+        """mihomo proxy: VLESS + XHTTP + TLS to <host>:443 (caddy, the host's own name).
+
+        With ``exit_host`` the host is a relay entry and the id selects the exit
+        (sha256("<user>.<exit>.<SALT>"), as vpn/xray.json.j2 renders it); without it
+        the host itself is the exit (sha256("<user>.<SALT>")).
+        """
+        if not user:
+            logger.warning(f"xhttp entry {proxy_name}: ids are per user, no user given")
+            return {}
+        if not settings.xhttp_path:
+            logger.warning(f"xhttp entry {proxy_name}: XHTTP_PATH is not set")
+            return {}
+        seed = (
+            f"{user}.{exit_host}.{settings.salt}"
+            if exit_host
+            else f"{user}.{settings.salt}"
+        )
+        xhttp_opts: dict[str, Any] = {"path": f"/{settings.xhttp_path}", "host": host}
+        if settings.xhttp_mode:
+            xhttp_opts["mode"] = settings.xhttp_mode
+        return {
+            "name": proxy_name,
+            "type": "vless",
+            "server": host,
+            "port": settings.https_port,
+            "uuid": self._vless_id(seed),
+            "udp": True,
+            "tls": True,
+            "servername": host,
+            "alpn": ["h2"],
+            "client-fingerprint": "chrome",
+            "network": "xhttp",
+            "xhttp-opts": xhttp_opts,
+        }
+
+    def _generate_hy2_xray_config(
+        self, host: str, proxy_name: str, user: str | None
+    ) -> dict[str, Any]:
+        """mihomo proxy: Hysteria2 on Xray (XRAY_HY2_PORT), the host's real certificate.
+
+        Salamander with OBFS_PASSWORD; HY2_PACKET_SIZE ("min-max") switches to Gecko,
+        which the server enables with the same value.
+        """
+        if not user or not settings.xray_hy2_port:
+            logger.warning(f"hy2-xray entry {proxy_name}: needs a user and XRAY_HY2_PORT")
+            return {}
+        config: dict[str, Any] = {
+            "name": proxy_name,
+            "type": "hysteria2",
+            "server": host,
+            "port": int(settings.xray_hy2_port),
+            "password": hashlib.sha256(f"{user}.{settings.salt}".encode()).hexdigest(),
+            "sni": host,
+            "alpn": ["h3"],
+            "obfs": "salamander",
+            "obfs-password": settings.obfs_password,
+            "udp": True,
+        }
+        if settings.hy2_packet_size:
+            low, _, high = settings.hy2_packet_size.partition("-")
+            config["obfs"] = "gecko"
+            config["obfs-min-packet-size"] = int(low)
+            config["obfs-max-packet-size"] = int(high or low)
+        return config
 
     def _generate_hysteria2_config(
         self, host: str, proxy_name: str, password: str | None = None
@@ -428,18 +510,23 @@ class ProxyConfig:
         return str(uuid.UUID(hash_val))
 
     def get_proxy_list(
-        self, sub_name: str | None = None, password: str | None = None
+        self,
+        sub_name: str | None = None,
+        password: str | None = None,
+        user: str | None = None,
     ) -> list[str]:
         """Get list of proxy names for PROXY_LIST.
 
         Args:
             sub_name: Subscription name, defaults to 'default'
             password: Password from query parameter (optional)
+            user: Username (optional); per-user entries (xhttp, hy2-xray) need it,
+                so without it they are left out here exactly as in PROXY_CONFIGS
 
         Returns:
             List of proxy names
         """
-        proxy_configs = self.generate_proxy_configs(sub_name, password, None)
+        proxy_configs = self.generate_proxy_configs(sub_name, password, user)
         return [config["name"] for config in proxy_configs]
 
     def get_proxy_urls(
@@ -460,6 +547,9 @@ class ProxyConfig:
 
         for config in proxy_configs:
             protocol = config.get("type", "")
+            if config.get("network") == "xhttp" or config.get("obfs") == "gecko":
+                # XHTTP / Gecko entries are served as mihomo subscriptions only.
+                continue
             if protocol == "hysteria2":
                 if config.get("port") == settings.hysteria2_v2_port:
                     user_password = (

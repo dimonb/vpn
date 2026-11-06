@@ -42,6 +42,14 @@ class Settings(BaseSettings):
     xray_privatekey: str = Field(default="")
     xray_publickey: str = Field(default="")
     xray_verify: str = Field(default="")
+    # Xray user transports (vpn/xray.json.j2); empty = not offered.
+    xhttp_path: str = Field(default="")
+    xhttp_mode: str = Field(default="")  # mihomo xhttp-opts.mode; empty = client default
+    xray_hy2_port: str = Field(default="")
+    hy2_packet_size: str = Field(default="")  # "min-max" switches hy2 to Gecko
+    # mihomo subscription headers (CLASH templates); empty = header not sent.
+    profile_update_interval: str = Field(default="")  # hours
+    profile_title: str = Field(default="")
     base_url: str = Field(default="")
 
     # RULE-SET / NETSET list cache (see listcache.py). The directory is a docker

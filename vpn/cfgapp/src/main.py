@@ -1,7 +1,9 @@
 """Main FastAPI application for CFG proxy processing."""
 
+import base64
 import json
 import logging
+import urllib.parse
 from contextlib import asynccontextmanager
 
 import httpx
@@ -179,6 +181,28 @@ async def forward_request(request: Request, path_with_search: str) -> httpx.Resp
         f"Connection error to origin after {ORIGIN_ATTEMPTS} attempts: {last_error}"
     )
     raise HTTPException(status_code=502, detail="Bad Gateway") from last_error
+
+
+def clash_subscription_headers() -> dict[str, str]:
+    """Headers mihomo clients (Clash Verge Rev, Clash Mi, FlClash) read from a subscription.
+
+    ``profile-update-interval`` (hours) is the refresh cadence; ``profile-title`` and the
+    ``content-disposition`` filename name the profile. Each is sent only when its
+    setting is non-empty, so profiles that do not configure them see no change.
+    """
+    headers: dict[str, str] = {}
+    if settings.profile_update_interval:
+        headers["profile-update-interval"] = settings.profile_update_interval
+    if settings.profile_title:
+        title = settings.profile_title
+        if title.isascii():
+            headers["profile-title"] = title
+        else:
+            headers["profile-title"] = "base64:" + base64.b64encode(title.encode()).decode()
+        headers["content-disposition"] = (
+            "attachment; filename*=UTF-8''" + urllib.parse.quote(title + ".yaml")
+        )
+    return headers
 
 
 @app.get("/health")
@@ -429,11 +453,10 @@ async def proxy_handler(request: Request, path: str):
                         media_type="application/json",
                     )
 
-            return Response(
-                content=final_body,
-                status_code=200,
-                headers={"content-type": "text/plain; charset=utf-8"},
-            )
+            headers = {"content-type": "text/plain; charset=utf-8"}
+            if "CLASH" in tags:
+                headers.update(clash_subscription_headers())
+            return Response(content=final_body, status_code=200, headers=headers)
 
     except HTTPException:
         # Re-raise HTTP exceptions (like 401 Authentication required)
