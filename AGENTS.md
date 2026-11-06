@@ -449,8 +449,26 @@ client ──UDP XRAY_HY2_PORT──▶ xray hy2-in (Hysteria2, LE certificate, 
 
 ## XHTTP entry, the relay on Xray, and the mihomo subscription
 
-Optional, off unless `XHTTP_PATH` (and for hy2 `XRAY_HY2_PORT`) is set in the ENV_FILE; a profile
-that sets neither renders exactly as before apart from Xray's own move (below).
+Off unless `XHTTP_PATH` (and for hy2 `XRAY_HY2_PORT`) is set in the ENV_FILE; a profile that sets
+neither renders exactly as before apart from Xray's own move (below).
+
+**XHTTP mode replaces the legacy user stack** (on purpose: users must re-import the new
+subscription; old entries stop working at the deploy). With `XHTTP_PATH` set:
+
+- no `sing-box` and no `hysteria` containers (`up --remove-orphans` removes them), so no user
+  REALITY on `ok.ru`, no hy2/hy2-v2 ports; caddy drops the `ok.ru` route;
+- the Xray REALITY inbound accepts **only `system`**: it stays as the relay → exit link, old
+  REALITY users are refused;
+- the relay's tunnel proxy (`cfgapp-in`: same address, port, user and password, so cfgapp's
+  `HTTP(S)_PROXY` and the docker drop-in are unchanged) is an Xray `http` inbound balanced
+  (`leastPing`, probed every minute) over the `to-<exit>` outbounds; `deploy_vpn.yml` finds the
+  relay from the xhttp entries instead of `proxy.<host>.features`;
+- XHTTP itself is only rendered (xray inbound + caddy route) on hosts that are the `host` of an
+  xhttp entry — exits reached through the relay do not answer it;
+- `/hy2/metrics` now serves `xray_user_{uplink,downlink}_bytes_total{user="<user>@<exit>"}` from
+  Xray's `/debug/vars` (json-exporter), instead of `hy2_user_*` — update dashboards/alerts.
+
+Without `XHTTP_PATH` (e.g. a profile not migrated yet) everything renders as before.
 
 **Why an entry in Russia, and why its own name.** Measured 2026-11 from a Russian home ISP: TLS to
 addresses of large cloud providers (several regions) *freezes after 16 KB* when the SNI is

@@ -1,3 +1,7 @@
+{% set config = lookup('file', config_file | default('config.json')) | from_json %}
+{% set ns_x = namespace(here=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
+{% set xhttp_here = (xhttp_path | default('') | string) and ns_x.here %}
 {# Admin API off: every deploy recreates the container, so nothing needs live reloads, and an
    open 127.0.0.1:2019 lets anyone who reaches the host's loopback rewrite the whole config. #}
 {
@@ -25,12 +29,16 @@
         "l4": {
           "listen": [":443"],
           "routes": [
+{% if not (xhttp_path | default('') | string) %}
+            {# sing-box REALITY for users; gone in XHTTP mode. #}
             {
               "match": [{ "tls": { "sni": ["ok.ru"] } }],
               "handle": [
                 { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:8443"] }] }
               ]
             },
+{% endif %}
+            {# Xray REALITY: in XHTTP mode only the relay account `system` (the relay → exit link). #}
             {
               "match": [{ "tls": { "sni": ["www.icloud.com", "icloud.com"] } }],
               "handle": [
@@ -103,7 +111,7 @@
                 }
               ]
             },
-{% if xhttp_path | default('') | string %}
+{% if xhttp_here %}
             {# VLESS + XHTTP: this host's own name and certificate on :443; only the secret path
                reaches Xray (h2c on loopback, streamed both ways), everything else stays the
                decoy site. Must come before the cfgapp catch-all. #}

@@ -4,7 +4,13 @@
 {% set host_cfg = (proxy_cfg.get(ansible_host) if proxy_cfg is mapping and proxy_cfg.get(ansible_host) else none) %}
 {% set features = (host_cfg.get('features') if host_cfg is mapping else none) %}
 {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
-{% set relay = (forward_group and config.subs.get(forward_group)) %}
+{# XHTTP mode (XHTTP_PATH set) replaces the legacy user stack: no sing-box, no hysteria; Xray
+   serves users (XHTTP) and, on the relay entry, the tunnel proxy cfgapp and docker use. The
+   relay is then the host named as `host` of an xhttp entry with an `exit`. #}
+{% set xhttp_on = (xhttp_path | default('') | string | length > 0) %}
+{% set ns = namespace(xhttp_relay=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host and _it.get('exit') %}{% set ns.xhttp_relay = true %}{% endif %}{% endfor %}{% endfor %}
+{% set relay = ns.xhttp_relay if xhttp_on else (forward_group and config.subs.get(forward_group)) %}
 services:
   xray:
     # Mirror of ghcr.io/xtls/xray-core:26.10.31 (byte-identical index, same digest).
@@ -30,6 +36,7 @@ services:
     command: ["run", "-c", "/etc/xray/config.json"]
     depends_on:
       - proxy
+{% if not xhttp_on %}
   sing-box:
     image: itdoginfo/sing-box:v1.14.4
     environment:
@@ -47,6 +54,7 @@ services:
       - ./cert:/cert
       - ./hysteria.yaml:/etc/hysteria.yaml
     command: ["server", "-c", "/etc/hysteria.yaml"]
+{% endif %}
   proxy:
     image: dimonb/caddy:2.11.9
     restart: unless-stopped

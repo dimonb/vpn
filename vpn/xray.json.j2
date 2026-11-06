@@ -16,6 +16,11 @@
     Russian ISPs only ever see this host; the exits' addresses never meet the Russian DPI. #}
 {% set relay_exits = [] %}
 {% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host and _it.get('exit') and _it.exit not in relay_exits %}{% set _ = relay_exits.append(_it.exit) %}{% endif %}{% endfor %}{% endfor %}
+{#- Users enter only where the subscription points: xhttp-in (and caddy's route) exist on a host
+    that is the `host` of some xhttp entry. Exits reached through a relay need neither. #}
+{% set ns_x = namespace(here=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
+{% set xhttp_here = xhttp_path and ns_x.here %}
 {% macro vless_id(seed) %}{{ seed | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}{% endmacro %}
 {
   "log": {
@@ -26,7 +31,10 @@
     "maskAddress": ""
   },
   "routing": {
-    "domainStrategy": "IPIfNonMatch",
+    "domainStrategy": "IPIfNonMatch",{% if xhttp_path and relay_exits %}
+    "balancers": [
+      { "tag": "exits", "selector": ["to-"], "strategy": { "type": "leastPing" }, "fallbackTag": "to-{{ relay_exits[0] }}" }
+    ],{% endif %}
     "rules": [
       {
         "ip": [
@@ -42,6 +50,10 @@
         ],
         "type": "field"
       }{% if xhttp_path and relay_exits %},
+      {
+        "inboundTag": ["cfgapp-in"],
+        "balancerTag": "exits"
+      },
       {# Russian destinations leave here (clients normally send them direct already). #}
       {
         "inboundTag": ["xhttp-in"],
@@ -75,7 +87,8 @@
       "protocol": "vless",
       "settings": {
         "clients": [
-          {% for user in config.users %}
+          {# XHTTP mode: users no longer connect here; only the relay's account remains. #}
+          {% for user in (['system'] if xhttp_path else config.users) %}
           {
             "email": "{{ user }}",
             "flow": "xtls-rprx-vision",
@@ -138,7 +151,18 @@
         "metadataOnly": false,
         "routeOnly": true
       }
-    }{% if xhttp_path %},
+    }{% if xhttp_path and relay_exits %},
+    {# The tunnel proxy cfgapp (origin fetches) and dockerd (pulls) use on a relay, which used to
+       be sing-box's `cfgapp-in`: same address, port and password; out via the exits. #}
+    {
+      "tag": "cfgapp-in",
+      "listen": "{{ tunnel_proxy_gateway | default('172.29.77.1') }}",
+      "port": {{ tunnel_proxy_port | default(1080) }},
+      "protocol": "http",
+      "settings": {
+        "accounts": [{ "user": "cfgapp", "pass": "{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}" }]
+      }
+    }{% endif %}{% if xhttp_here %},
     {
       "tag": "xhttp-in",
       "listen": "127.0.0.1",
@@ -304,7 +328,12 @@
   "stats": {},
   "reverse": null,
   "fakedns": null,
-  "observatory": null,
+  "observatory": {% if xhttp_path and relay_exits %}{
+    "subjectSelector": ["to-"],
+    "probeUrl": "https://www.gstatic.com/generate_204",
+    "probeInterval": "1m",
+    "enableConcurrency": true
+  }{% else %}null{% endif %},
   "burstObservatory": null,
   "metrics": {
     "listen": "127.0.0.1:11111",

@@ -1,3 +1,22 @@
+{# Rendered by deploy_vpn.yml (Jinja). XHTTP mode: per-user traffic from Xray's metrics
+   (/debug/vars, stats.user."<user>[@<exit>]"), exported as xray_user_{uplink,downlink}_bytes_total;
+   otherwise the hysteria server's traffic API as before. Served on /hy2/metrics either way. #}
+{% if xhttp_path | default('') | string %}
+# json-exporter.yml  (Catawiki json_exporter)
+targets:
+  - name: xray
+    url: http://127.0.0.1:11111/debug/vars
+    rules:
+      - name: xray_user_${dir}_bytes
+        object_path: $.stats.user
+        # relative to object_path ("$" would restart at the document root)
+        metric_path: "*.*"
+        metric_type: counter
+        # path is stats.user.<user>.<dir>; keys with "@" or "." come quoted: stats.user.'a@b'.<dir>
+        regex: "stats\\.user\\.'?(?P<user>.+?)'?\\.(?P<dir>uplink|downlink)$"
+        static_labels:
+          user: $user
+{% else %}
 # json-exporter.yml  (Catawiki json_exporter)
 targets:
   - name: hy2
@@ -12,3 +31,4 @@ targets:
         regex: (?P<user>[^.]+)\.(?P<dir>tx|rx)
         static_labels:
           user: $user
+{% endif %}
