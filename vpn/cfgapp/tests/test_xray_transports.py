@@ -1,4 +1,4 @@
-"""XHTTP and Hysteria2-on-Xray entries, and the mihomo subscription headers."""
+"""XHTTP entries and the mihomo subscription headers."""
 
 import base64
 import hashlib
@@ -26,8 +26,6 @@ def xray_settings(monkeypatch):
     monkeypatch.setattr(settings, "obfs_password", "obfs-secret")
     monkeypatch.setattr(settings, "xhttp_path", "secretpath")
     monkeypatch.setattr(settings, "xhttp_mode", "")
-    monkeypatch.setattr(settings, "xray_hy2_port", "47040")
-    monkeypatch.setattr(settings, "hy2_packet_size", "")
     monkeypatch.setattr(settings, "https_port", 443)
     monkeypatch.setattr(settings, "profile_update_interval", "")
     monkeypatch.setattr(settings, "profile_title", "")
@@ -52,7 +50,6 @@ def proxy_config(tmp_path: Path) -> ProxyConfig:
             },
             "direct": {
                 "Direct": {"protocol": "xhttp", "host": "exit-ie.example.net"},
-                "Direct hy2": {"protocol": "hy2-xray", "host": "exit-ie.example.net"},
             },
         },
     }
@@ -92,32 +89,6 @@ def test_xhttp_needs_a_user_and_a_path(xray_settings, proxy_config, monkeypatch)
     assert proxy_config.generate_proxy_configs("regions", None, None) == []
     monkeypatch.setattr(settings, "xhttp_path", "")
     assert proxy_config.generate_proxy_configs("regions", None, "alice") == []
-
-
-def test_hy2_xray_salamander(xray_settings, proxy_config):
-    hy2 = proxy_config.generate_proxy_configs("direct", None, "alice")[1]
-    assert hy2["type"] == "hysteria2"
-    assert hy2["port"] == 47040
-    assert hy2["password"] == hashlib.sha256(f"alice.{SALT}".encode()).hexdigest()
-    assert hy2["sni"] == "exit-ie.example.net"
-    assert hy2["obfs"] == "salamander"
-    assert hy2["obfs-password"] == "obfs-secret"
-    assert "skip-cert-verify" not in hy2
-
-
-def test_hy2_xray_gecko(xray_settings, proxy_config, monkeypatch):
-    monkeypatch.setattr(settings, "hy2_packet_size", "413-1105")
-    hy2 = proxy_config.generate_proxy_configs("direct", None, "alice")[1]
-    assert hy2["obfs"] == "gecko"
-    assert hy2["obfs-min-packet-size"] == 413
-    assert hy2["obfs-max-packet-size"] == 1105
-
-
-def test_hy2_xray_off_without_port(xray_settings, proxy_config, monkeypatch):
-    monkeypatch.setattr(settings, "xray_hy2_port", "")
-    assert [p["name"] for p in proxy_config.generate_proxy_configs("direct", None, "alice")] == [
-        "Direct"
-    ]
 
 
 def test_share_links_skip_xhttp(xray_settings, proxy_config):

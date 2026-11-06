@@ -444,13 +444,11 @@ client ──443, SNI = the host's own name──▶ caddy l4 default ─▶ :44
              │     (VLESS + REALITY www.icloud.com, account `system`) ─▶ EXIT ─▶ internet
              │     RU destinations ─▶ direct here; an id with no exit ─▶ blocked
              └─ otherwise: id = sha256("<user>.<SALT>") ─▶ direct (this host is the exit)
-client ──UDP XRAY_HY2_PORT──▶ xray hy2-in (Hysteria2, LE certificate, Salamander/Gecko) ─▶ direct
 ```
 
 ## XHTTP entry, the relay on Xray, and the mihomo subscription
 
-Off unless `XHTTP_PATH` (and for hy2 `XRAY_HY2_PORT`) is set in the ENV_FILE; a profile that sets
-neither renders exactly as before apart from Xray's own move (below).
+Off unless `XHTTP_PATH` is set in the ENV_FILE; a profile without it renders exactly as before apart from Xray's own move (below).
 
 **XHTTP mode replaces the legacy user stack** (on purpose: users must re-import the new
 subscription; old entries stop working at the deploy). With `XHTTP_PATH` set:
@@ -466,7 +464,8 @@ subscription; old entries stop working at the deploy). With `XHTTP_PATH` set:
 - XHTTP itself is only rendered (xray inbound + caddy route) on hosts that are the `host` of an
   xhttp entry — exits reached through the relay do not answer it;
 - `/hy2/metrics` now serves `xray_user_{uplink,downlink}_bytes_total{user="<user>@<exit>"}` from
-  Xray's `/debug/vars` (json-exporter), instead of `hy2_user_*` — update dashboards/alerts.
+  Xray's `/debug/vars` (json-exporter), instead of `hy2_user_*` — update dashboards/alerts (the path
+  keeps its name so the scrape config does not change).
 
 Without `XHTTP_PATH` (e.g. a profile not migrated yet) everything renders as before.
 
@@ -494,9 +493,7 @@ https://<host>/<a template path>` must return the full body.
   destinations leave the entry directly; anything unmatched is blocked, never sent out from the entry.
 - `cfgapp` renders the same entries for mihomo (`protocol: xhttp` → `type: vless`, `network: xhttp`,
   `servername` = the entry host, the per-exit id), so the server and the subscription cannot drift.
-- An `xhttp` entry **without** `exit` is a direct exit on its own host (per-user id). `hy2-xray`
-  entries are Hysteria2 on `XRAY_HY2_PORT` of that host (direct only — do not enable it on the
-  relay entry, its traffic would leave there).
+- An `xhttp` entry **without** `exit` is a direct exit on its own host (per-user id).
 - The exits need nothing new: their REALITY inbound and the `system` account already exist.
 
 **Subscription.** One mihomo YAML per user from a `#CLASH,AUTH` template (in the template repo, e.g.
@@ -504,19 +501,21 @@ https://<host>/<a template path>` must return the full body.
 `PROFILE_UPDATE_INTERVAL` sends `profile-update-interval` (hours; mihomo clients refresh on it —
 Clash Mi only when "prefer the profile's interval" is on), `PROFILE_TITLE` the profile name.
 
-**Xray's container changed** (all profiles): `network_mode: host` (hy2 is UDP; every TCP inbound is on
-127.0.0.1 behind caddy), `user: root` (the image runs as uid 65532, caddy's keys are 0600 root and the
-hy2 inbound reads them in place so renewals apply), `./caddy` mounted read-only, image 26.10.31 —
-**run `make mirror-images` before the first deploy** so RU hosts can pull it. The REALITY inbound
-listens on 127.0.0.1 (`xray_reality_port`, default 28443), as caddy dials it. `deploy_vpn.yml` sets
-`net.core.{r,w}mem_max` to 16 MB (hy2 asks for 7 MB socket buffers).
+**Xray's container changed** (all profiles): `network_mode: host` (on a relay the tunnel proxy listens on
+the `vpn-tunnel` bridge gateway, as sing-box did; every other inbound is on 127.0.0.1 behind caddy),
+image 26.10.31 — **run `make mirror-images` before the first deploy** so RU hosts can pull it. The
+REALITY inbound listens on 127.0.0.1 (`xray_reality_port`, default 28443), as caddy dials it.
+
+**No hy2 for users.** From Russian networks UDP to the exits' addresses did not come back (client
+packets arrived, replies never did), and hy2 on the relay entry would leave from the entry itself, not
+the chosen exit. XHTTP through the relay is the only user transport.
 
 **Testing without production credentials** (how this was verified): render with throwaway values,
 run the rendered xray on a spare host next to the live one (`xray_reality_port`/`xhttp_port`
 overrides avoid clashes), point the relay at a *mock exit* (a second xray with a REALITY inbound,
 throwaway keys, account `system`, `https_port` override) and check: each region id reaches the
-exit, a plain per-user id is refused (`invalid request user id`), RU names go direct. `xray run
--test` needs the certificate mounted and `--user root`. Then feed cfgapp's YAML to mihomo
+exit, a plain per-user id is refused (`invalid request user id`), RU names go direct. Check the
+rendered file with `xray run -test`. Then feed cfgapp's YAML to mihomo
 (`mihomo -t`, then select each region via the API and fetch through it).
 
 ## Adding a host on Oracle Cloud

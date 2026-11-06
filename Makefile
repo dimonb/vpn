@@ -42,10 +42,10 @@ SERVERS_FILE ?= "servers.cfg"
 # Test mode - limit to specific instance
 TEST_ONLY ?= ""
 
-# Optional Xray user transports and mihomo subscription headers (env.example). Read from the
+# Optional XHTTP mode and mihomo subscription headers (env.example). Read from the
 # sourced ENV_FILE in the recipe's shell, so values may contain spaces (PROFILE_TITLE). Empty =
 # feature off: the templates then render as before.
-XRAY_ENV_ARGS := -e "xhttp_path=$${XHTTP_PATH:-}" -e "xhttp_port=$${XHTTP_PORT:-28480}" -e "xhttp_mode=$${XHTTP_MODE:-}" -e "xray_hy2_port=$${XRAY_HY2_PORT:-}" -e "hy2_packet_size=$${HY2_PACKET_SIZE:-}" -e "profile_update_interval=$${PROFILE_UPDATE_INTERVAL:-}" -e "profile_title=$${PROFILE_TITLE:-}"
+XRAY_ENV_ARGS := -e "xhttp_path=$${XHTTP_PATH:-}" -e "xhttp_port=$${XHTTP_PORT:-28480}" -e "xhttp_mode=$${XHTTP_MODE:-}" -e "profile_update_interval=$${PROFILE_UPDATE_INTERVAL:-}" -e "profile_title=$${PROFILE_TITLE:-}"
 
 # Common Ansible arguments
 ANSIBLE_ARGS := -i $(SERVERS_FILE) --ssh-extra-args='-o ControlPersist=60s'$(if $(filter-out "",$(TEST_ONLY)), --limit $(TEST_ONLY),)
@@ -101,7 +101,7 @@ check-env:
 		echo "ERROR: REALITY_SHORT_ID is not set. Please create .env file from env.example and set REALITY_SHORT_ID value"; \
 		exit 1; \
 	fi; \
-	echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT), Hysteria2-v2: $(HYSTERIA2_V2_PORT), VLESS: $(VLESS_PORT), Xray hy2: $${XRAY_HY2_PORT:-off}, XHTTP: $${XHTTP_PATH:+on}"
+	echo "Using ports - HTTP: $(HTTP_PORT), HTTPS: $(HTTPS_PORT), Hysteria2: $(HYSTERIA2_PORT), Hysteria2-v2: $(HYSTERIA2_V2_PORT), VLESS: $(VLESS_PORT), XHTTP: $${XHTTP_PATH:+on}"
 
 deploy: check-env
 	@source $(ENV_FILE) 2>/dev/null || true; \

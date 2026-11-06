@@ -117,8 +117,6 @@ class ProxyConfig:
                 generated = self._generate_xhttp_config(
                     host, proxy_name, user, entry.get("exit")
                 )
-            elif protocol == "hy2-xray":
-                generated = self._generate_hy2_xray_config(host, proxy_name, user)
             else:
                 # Generate one config per proxy (not per user)
                 generated = self._generate_proxy_config(
@@ -209,36 +207,6 @@ class ProxyConfig:
             "network": "xhttp",
             "xhttp-opts": xhttp_opts,
         }
-
-    def _generate_hy2_xray_config(
-        self, host: str, proxy_name: str, user: str | None
-    ) -> dict[str, Any]:
-        """mihomo proxy: Hysteria2 on Xray (XRAY_HY2_PORT), the host's real certificate.
-
-        Salamander with OBFS_PASSWORD; HY2_PACKET_SIZE ("min-max") switches to Gecko,
-        which the server enables with the same value.
-        """
-        if not user or not settings.xray_hy2_port:
-            logger.warning(f"hy2-xray entry {proxy_name}: needs a user and XRAY_HY2_PORT")
-            return {}
-        config: dict[str, Any] = {
-            "name": proxy_name,
-            "type": "hysteria2",
-            "server": host,
-            "port": int(settings.xray_hy2_port),
-            "password": hashlib.sha256(f"{user}.{settings.salt}".encode()).hexdigest(),
-            "sni": host,
-            "alpn": ["h3"],
-            "obfs": "salamander",
-            "obfs-password": settings.obfs_password,
-            "udp": True,
-        }
-        if settings.hy2_packet_size:
-            low, _, high = settings.hy2_packet_size.partition("-")
-            config["obfs"] = "gecko"
-            config["obfs-min-packet-size"] = int(low)
-            config["obfs-max-packet-size"] = int(high or low)
-        return config
 
     def _generate_hysteria2_config(
         self, host: str, proxy_name: str, password: str | None = None
@@ -520,7 +488,7 @@ class ProxyConfig:
         Args:
             sub_name: Subscription name, defaults to 'default'
             password: Password from query parameter (optional)
-            user: Username (optional); per-user entries (xhttp, hy2-xray) need it,
+            user: Username (optional); per-user entries (xhttp) need it,
                 so without it they are left out here exactly as in PROXY_CONFIGS
 
         Returns:
@@ -547,8 +515,8 @@ class ProxyConfig:
 
         for config in proxy_configs:
             protocol = config.get("type", "")
-            if config.get("network") == "xhttp" or config.get("obfs") == "gecko":
-                # XHTTP / Gecko entries are served as mihomo subscriptions only.
+            if config.get("network") == "xhttp":
+                # XHTTP entries are served as mihomo subscriptions only.
                 continue
             if protocol == "hysteria2":
                 if config.get("port") == settings.hysteria2_v2_port:

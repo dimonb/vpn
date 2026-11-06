@@ -22,20 +22,12 @@ services:
     # sing-box-based apps. Re-test with a sing-box client before bumping.
     image: dimonb/xray-core:26.2.6
     restart: unless-stopped
-    # Host network: hy2 is UDP (no userland docker-proxy in the path, real client IPs), and
-    # every TCP inbound listens on 127.0.0.1 behind caddy.
+    # Host network: on a relay the tunnel proxy listens on the vpn-tunnel bridge gateway (as
+    # sing-box did); every other inbound is on 127.0.0.1 behind caddy.
     network_mode: host
-    # The image runs as uid 65532, but caddy keeps its private keys 0600 root; the hy2 inbound
-    # reads the key in place (so renewals apply), hence root — as sing-box and caddy already run.
-    user: root
     volumes:
       - ./xray.json:/etc/xray/config.json:ro
-      # Caddy's certificate storage: the hy2 inbound uses the host's Let's Encrypt
-      # certificate; Xray re-reads the files, so caddy's renewals are picked up.
-      - ./caddy:/caddy:ro
     command: ["run", "-c", "/etc/xray/config.json"]
-    depends_on:
-      - proxy
 {% if not xhttp_on %}
   sing-box:
     image: itdoginfo/sing-box:v1.14.4
@@ -101,8 +93,6 @@ services:
       - XRAY_VERIFY={{ xray_verify }}
       - XHTTP_PATH={{ xhttp_path | default('') }}
       - XHTTP_MODE={{ xhttp_mode | default('') }}
-      - XRAY_HY2_PORT={{ xray_hy2_port | default('') }}
-      - HY2_PACKET_SIZE={{ hy2_packet_size | default('') }}
       - PROFILE_UPDATE_INTERVAL={{ profile_update_interval | default('') }}
       - PROFILE_TITLE={{ profile_title | default('') }}
       - SALT={{ salt }}
