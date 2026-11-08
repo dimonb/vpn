@@ -12,14 +12,15 @@
 {% set xhttp_here = (xhttp_path | default('') | string | length > 0) and ns_x.here %}
 services:
   xray:
-    # Mirror of ghcr.io/xtls/xray-core:26.2.6 (byte-identical index, same digest).
+    # Mirror of ghcr.io/xtls/xray-core:26.7.28 (byte-identical index, same digest).
     # ghcr.io is blocked from Russian networks, docker.io is not — pulling upstream
     # directly makes every RU deploy depend on the sing-box tunnel already being up,
     # which a fresh host does not have. Re-mirror after a version bump: `make mirror-images`.
-    # Held at 26.2.6: Xray 26.10.31 as a REALITY server rejects sing-box clients (1.13 and 1.14:
-    # "authentication failed") while xray clients pass — that breaks relays using vless-v2 and
-    # sing-box-based apps. Re-test with a sing-box client before bumping.
-    image: dimonb/xray-core:26.2.6
+    # Held at 26.7.28, the newest REALITY server sing-box clients (relays using vless-v2,
+    # sing-box-based apps) still pass: 26.7.11+ needs `minClientVer: "0.0.0"` in xray.json.j2,
+    # and 26.9.9+ rejects any ClientHello without an X25519MLKEM768 key share, which sing-box
+    # strips. Re-test with a sing-box client before bumping.
+    image: dimonb/xray-core:26.7.28
     restart: unless-stopped
     volumes:
       - ./xray.json:/etc/xray/config.json:ro

@@ -235,8 +235,8 @@ Error response from daemon: Head "https://ghcr.io/v2/xtls/xray-core/manifests/26
 deploy; `ru-0.example.net` only got through because it had the manifest cached.
 
 **Fix: the image is mirrored, so nothing the deploy pulls lives on a blocked registry.**
-`vpn/docker-compose.yml.j2` uses `dimonb/xray-core:26.2.6` — a copy of `ghcr.io/xtls/xray-core`
-with the *same digest* (`sha256:c6daec52…`, the full 9-platform index). `make mirror-images` re-runs
+`vpn/docker-compose.yml.j2` uses `dimonb/xray-core:<tag>` — a copy of `ghcr.io/xtls/xray-core`
+with the *same digest* (the full multi-platform index). `make mirror-images` re-runs
 the copy from the `MIRROR_IMAGES` list in the Makefile; it uses `crane` (registry→registry, no
 docker daemon) and prints both digests so you can see they match. **After bumping the xray version
 in `docker-compose.yml.j2`, bump it in `MIRROR_IMAGES` and run `make mirror-images` — otherwise RU
@@ -464,8 +464,11 @@ subscriptions keep working and users move over at their own pace. With `XHTTP_PA
   from Xray's `/debug/vars` (published on `127.0.0.1:11111` only on XHTTP hosts).
 
 Xray stays in its bridge network (a proxied request for 127.0.0.1 lands in the container, not on the
-host's loopback services) and **on 26.2.6**: XHTTP needs nothing newer, and 26.10.31 as a REALITY
-server rejects sing-box clients, which would cut off relays using `vless-v2` and sing-box-based apps.
+host's loopback services) and **on 26.7.28**, the newest REALITY server sing-box clients still pass
+(relays using `vless-v2`, sing-box-based apps). Since 26.7.11 an empty `minClientVer` means a default
+minimum of 26.3.27 that sing-box does not report, so the template sets `"0.0.0"` explicitly. Since
+26.9.9 the server rejects any ClientHello without an X25519MLKEM768 key share; sing-box strips it
+(mihomo sends it only with `reality-opts.support-x25519mlkem768: true`), so 26.9+ cuts them off.
 
 **Why an entry in Russia, and why its own name.** Measured 2026-11 from a Russian home ISP: TLS to
 addresses of large cloud providers (several regions) *freezes after 16 KB* when the SNI is

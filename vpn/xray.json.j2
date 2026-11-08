@@ -117,7 +117,9 @@
         "realitySettings": {
           "maxClientVer": "",
           "maxTimediff": 0,
-          "minClientVer": "",
+          {# Explicit "0.0.0": since Xray 26.7.11 an empty value means a default minimum
+             (26.3.27) that sing-box REALITY clients do not report, so they fail to authenticate. #}
+          "minClientVer": "0.0.0",
           "mldsa65Seed": "{{ xray_mldsa65seed }}",
           "privateKey": "{{ xray_privatekey }}",
           "serverNames": [
@@ -229,7 +231,7 @@
           "serverName": "www.icloud.com",
           "fingerprint": "chrome",
           "publicKey": "{{ xray_publickey }}",
-          {# No mldsa65Verify: Xray 26.2.6 refuses the profile's verify value here ("invalid
+          {# No mldsa65Verify: Xray (26.2.6 at least) refuses the profile's verify value here ("invalid
              mldsa65Verify"), and the sing-box relays dial the same inbound without it. #}
           "shortId": "3e3e"
         }
