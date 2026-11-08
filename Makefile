@@ -48,7 +48,7 @@ ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" 
 
 # Upstream images that live on a registry unreachable from Russian networks, mirrored
 # into docker.io/dimonb/*. Format: <source>=<target>.
-MIRROR_IMAGES := ghcr.io/xtls/xray-core:26.10.31=dimonb/xray-core:26.10.31
+MIRROR_IMAGES := ghcr.io/xtls/xray-core:26.2.6=dimonb/xray-core:26.2.6
 
 .PHONY: install-docker check-env deploy deploy-test cn passwords ubuntu-update ubuntu-upgrade amneziawg-install mirror-images
 
