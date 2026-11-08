@@ -172,7 +172,7 @@ class ClashProcessor:
                             and proxies[0] == "PROXY_LIST"
                         ):
                             proxy_list = self.proxy_config.get_proxy_list(
-                                sub_name, password
+                                sub_name, password, user
                             )
                             group["proxies"] = proxy_list
                             logger.info(

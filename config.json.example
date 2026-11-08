@@ -21,6 +21,18 @@
         "protocol": "vless",
         "host": "203.0.113.10"
       }
+    },
+    "regions": {
+      "🇩🇪 Germany": {
+        "protocol": "xhttp",
+        "host": "entry.example.net",
+        "exit": "de-1.example.net"
+      },
+      "🇸🇪 Sweden": {
+        "protocol": "xhttp",
+        "host": "entry.example.net",
+        "exit": "203.0.113.10"
+      }
     }
   },
   "routing": {

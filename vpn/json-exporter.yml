@@ -1,3 +1,9 @@
+{# Rendered by deploy_vpn.yml (Jinja). Served on /hy2/metrics. The hysteria server's traffic API
+   is always scraped; where this host serves XHTTP, Xray's per-user counters are added
+   (/debug/vars, stats.user."<user>[@<exit>]") as xray_user_{uplink,downlink}_bytes_total. #}
+{% set config = lookup('file', config_file | default('config.json')) | from_json %}
+{% set ns_x = namespace(here=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
 # json-exporter.yml  (Catawiki json_exporter)
 targets:
   - name: hy2
@@ -12,3 +18,17 @@ targets:
         regex: (?P<user>[^.]+)\.(?P<dir>tx|rx)
         static_labels:
           user: $user
+{% if (xhttp_path | default('') | string) and ns_x.here %}
+  - name: xray
+    url: http://127.0.0.1:11111/debug/vars
+    rules:
+      - name: xray_user_${dir}_bytes
+        object_path: $.stats.user
+        # relative to object_path ("$" would restart at the document root)
+        metric_path: "*.*"
+        metric_type: counter
+        # path is stats.user.<user>.<dir>; keys with "@" or "." come quoted: stats.user.'a@b'.<dir>
+        regex: "stats\\.user\\.'?(?P<user>.+?)'?\\.(?P<dir>uplink|downlink)$"
+        static_labels:
+          user: $user
+{% endif %}

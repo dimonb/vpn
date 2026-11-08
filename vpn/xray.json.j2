@@ -1,4 +1,25 @@
 {% set config = lookup('file', config_file | default('config.json')) | from_json %}
+{#- XHTTP mode (XHTTP_PATH set; empty = the template renders as before): VLESS + XHTTP on
+    loopback; caddy terminates TLS on :443 (the host's own name and Let's Encrypt certificate) and
+    forwards /<xhttp_path>/ here as h2c. #}
+{% set xhttp_path = xhttp_path | default('') | string %}
+{#- Relay entry: subscription entries `{"protocol": "xhttp", "host": <this host>, "exit": <exit>}`
+    make this host the users' only entry. Every user gets one VLESS id per exit
+    (sha256("<user>.<exit>.<SALT>"), email "<user>@<exit>"), and the id picks the exit: Xray
+    routes it over VLESS + REALITY (the exits' existing inbound, account `system`) to that exit.
+    Russian ISPs only ever see this host; the exits' addresses never meet the Russian DPI. #}
+{% set relay_exits = [] %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host and _it.get('exit') and _it.exit not in relay_exits %}{% set _ = relay_exits.append(_it.exit) %}{% endif %}{% endfor %}{% endfor %}
+{#- Users enter only where the subscription points: xhttp-in (and caddy's route) exist on a host
+    that is the `host` of some xhttp entry. Exits reached through a relay need neither. #}
+{% set ns_x = namespace(here=false, direct=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% if not _it.get('exit') %}{% set ns_x.direct = true %}{% endif %}{% endif %}{% endfor %}{% endfor %}
+{% set xhttp_here = xhttp_path and ns_x.here %}
+{#- An entry without `exit` makes this host the exit for that user's own id (sha256("<user>.<SALT>")). #}
+{% set xhttp_direct = xhttp_here and ns_x.direct %}
+{% set relay_exits = relay_exits if xhttp_here else [] %}
+{% set routing = (config.get('routing') if config.get('routing') is mapping else {}) %}
+{% macro vless_id(seed) %}{{ seed | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}{% endmacro %}
 {
   "log": {
     "access": "none",
@@ -23,17 +44,57 @@
           "bittorrent"
         ],
         "type": "field"
-      }
+      }{% if relay_exits %},
+      {# Russian destinations leave here (clients normally send them direct already), plus
+         config.routing.direct_domains, as on the sing-box relay. #}
+      {
+        "inboundTag": ["xhttp-in"],
+        "domain": ["domain:ru", "domain:su", "domain:xn--p1ai", "geosite:category-ru"{% for _d in (routing.get('direct_domains') or []) %}, "domain:{{ _d }}"{% endfor %}],
+        "outboundTag": "direct"
+      },
+      {# config.routing.pin {"<domain>": "<exit host>"}: only for exits this entry relays to. #}
+      {% for _domain, _exit in (routing.get('pin') or {}).items() %}{% if _exit in relay_exits %}
+      {
+        "inboundTag": ["xhttp-in"],
+        "domain": ["domain:{{ _domain }}"],
+        "outboundTag": "to-{{ _exit }}"
+      },
+      {% endif %}{% endfor %}
+      {
+        "inboundTag": ["xhttp-in"],
+        "ip": ["geoip:ru"],
+        "outboundTag": "direct"
+      },
+      {% for exit in relay_exits %}
+      {
+        "inboundTag": ["xhttp-in"],
+        "user": [{% for user in config.users %}"{{ user }}@{{ exit }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        "outboundTag": "to-{{ exit }}"
+      },
+      {% endfor %}{% if xhttp_direct %}
+      {# Users of an exit-less entry on this host leave from here. #}
+      {
+        "inboundTag": ["xhttp-in"],
+        "user": [{% for user in config.users %}"{{ user }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        "outboundTag": "direct"
+      },
+      {% endif %}
+      {# Fail closed: a relay user that matched no exit never leaves from this host. #}
+      {
+        "inboundTag": ["xhttp-in"],
+        "outboundTag": "blocked"
+      }{% endif %}
     ]
   },
   "dns": null,
   "inbounds": [
     {
       "listen": "0.0.0.0",
-      "port": 28443,
+      "port": {{ xray_reality_port | default(28443) }},
       "protocol": "vless",
       "settings": {
         "clients": [
+          {# Every user, as before; `system` (in config.users) is also the relay → exit account. #}
           {% for user in config.users %}
           {
             "email": "{{ user }}",
@@ -97,14 +158,43 @@
         "metadataOnly": false,
         "routeOnly": true
       }
-    }
+    }{% if xhttp_here %},
+    {
+      "tag": "xhttp-in",
+      "listen": "0.0.0.0",
+      "port": {{ xhttp_port | default(28480) }},
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {% set ids = [] %}
+          {% for exit in relay_exits %}{% for user in config.users %}{% set _ = ids.append((user ~ '@' ~ exit, user ~ '.' ~ exit ~ '.' ~ salt)) %}{% endfor %}{% endfor %}
+          {% if xhttp_direct or not relay_exits %}{% for user in config.users %}{% set _ = ids.append((user, user ~ '.' ~ salt)) %}{% endfor %}{% endif %}
+          {% for email, seed in ids %}
+          { "email": "{{ email }}", "id": "{{ vless_id(seed) }}" }{% if not loop.last %},{% endif %}
+          {% endfor %}
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "none",
+        "xhttpSettings": {
+          "path": "/{{ xhttp_path }}",
+          "mode": "auto"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"],
+        "routeOnly": true
+      }
+    }{% endif %}
   ],
   "outbounds": [
     {
       "protocol": "freedom",
       "settings": {
         "domainStrategy": "AsIs",
-        "noises": [],
         "redirect": ""
       },
       "tag": "direct"
@@ -113,7 +203,38 @@
       "protocol": "blackhole",
       "settings": {},
       "tag": "blocked"
-    }
+    }{% if relay_exits %}{% for exit in relay_exits %},
+    {
+      "tag": "to-{{ exit }}",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "{{ exit }}",
+            "port": {{ https_port | default(443) }},
+            "users": [
+              {
+                "id": "{{ vless_id('system.' + salt) }}",
+                "encryption": "none",
+                "flow": "xtls-rprx-vision"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "www.icloud.com",
+          "fingerprint": "chrome",
+          "publicKey": "{{ xray_publickey }}",
+          {# No mldsa65Verify: Xray 26.2.6 refuses the profile's verify value here ("invalid
+             mldsa65Verify"), and the sing-box relays dial the same inbound without it. #}
+          "shortId": "3e3e"
+        }
+      }
+    }{% endfor %}{% endif %}
   ],
   "transport": null,
   "policy": {
@@ -136,7 +257,8 @@
   "observatory": null,
   "burstObservatory": null,
   "metrics": {
-    "listen": "127.0.0.1:11111",
+    {# In the container; compose publishes it on the host's 127.0.0.1 only where XHTTP runs. #}
+    "listen": "{{ '0.0.0.0' if xhttp_here else '127.0.0.1' }}:11111",
     "tag": "metrics_out"
   }
 }

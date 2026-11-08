@@ -1,6 +1,7 @@
 """Proxy configuration management and generation."""
 
 import base64
+import hashlib
 import io
 import json
 import logging
@@ -104,20 +105,25 @@ class ProxyConfig:
         proxy_configs = []
         subscription_proxies = self.get_subscription_proxies(sub_name)
 
-        for proxy_name, proxy_config in subscription_proxies.items():
-            protocol = proxy_config.get("protocol", "")
-            host = proxy_config.get("host", "")
+        for proxy_name, entry in subscription_proxies.items():
+            protocol = entry.get("protocol", "")
+            host = entry.get("host", "")
 
             if not protocol or not host:
                 logger.warning(f"Invalid proxy config: {proxy_name}")
                 continue
 
-            # Generate one config per proxy (not per user)
-            proxy_config = self._generate_proxy_config(
-                protocol, host, proxy_name, password, user
-            )
-            if proxy_config:
-                proxy_configs.append(proxy_config)
+            if protocol == "xhttp":
+                generated = self._generate_xhttp_config(
+                    host, proxy_name, user, entry.get("exit")
+                )
+            else:
+                # Generate one config per proxy (not per user)
+                generated = self._generate_proxy_config(
+                    protocol, host, proxy_name, password, user
+                )
+            if generated:
+                proxy_configs.append(generated)
 
         logger.info(
             f"Generated {len(proxy_configs)} proxy configurations for subscription '{sub_name or 'default'}'"
@@ -157,6 +163,50 @@ class ProxyConfig:
         else:
             logger.warning(f"Unsupported protocol: {protocol}")
             return {}
+
+    @staticmethod
+    def _vless_id(seed: str) -> str:
+        """VLESS id the server templates derive: sha256(seed), first 32 hex as 8-4-4-4-12."""
+        h = hashlib.sha256(seed.encode()).hexdigest()
+        return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+    def _generate_xhttp_config(
+        self, host: str, proxy_name: str, user: str | None, exit_host: str | None
+    ) -> dict[str, Any]:
+        """mihomo proxy: VLESS + XHTTP + TLS to <host>:443 (caddy, the host's own name).
+
+        With ``exit_host`` the host is a relay entry and the id selects the exit
+        (sha256("<user>.<exit>.<SALT>"), as vpn/xray.json.j2 renders it); without it
+        the host itself is the exit (sha256("<user>.<SALT>")).
+        """
+        if not user:
+            logger.warning(f"xhttp entry {proxy_name}: ids are per user, no user given")
+            return {}
+        if not settings.xhttp_path:
+            logger.warning(f"xhttp entry {proxy_name}: XHTTP_PATH is not set")
+            return {}
+        seed = (
+            f"{user}.{exit_host}.{settings.salt}"
+            if exit_host
+            else f"{user}.{settings.salt}"
+        )
+        xhttp_opts: dict[str, Any] = {"path": f"/{settings.xhttp_path}", "host": host}
+        if settings.xhttp_mode:
+            xhttp_opts["mode"] = settings.xhttp_mode
+        return {
+            "name": proxy_name,
+            "type": "vless",
+            "server": host,
+            "port": settings.https_port,
+            "uuid": self._vless_id(seed),
+            "udp": True,
+            "tls": True,
+            "servername": host,
+            "alpn": ["h2"],
+            "client-fingerprint": "chrome",
+            "network": "xhttp",
+            "xhttp-opts": xhttp_opts,
+        }
 
     def _generate_hysteria2_config(
         self, host: str, proxy_name: str, password: str | None = None
@@ -428,18 +478,23 @@ class ProxyConfig:
         return str(uuid.UUID(hash_val))
 
     def get_proxy_list(
-        self, sub_name: str | None = None, password: str | None = None
+        self,
+        sub_name: str | None = None,
+        password: str | None = None,
+        user: str | None = None,
     ) -> list[str]:
         """Get list of proxy names for PROXY_LIST.
 
         Args:
             sub_name: Subscription name, defaults to 'default'
             password: Password from query parameter (optional)
+            user: Username (optional); per-user entries (xhttp) need it,
+                so without it they are left out here exactly as in PROXY_CONFIGS
 
         Returns:
             List of proxy names
         """
-        proxy_configs = self.generate_proxy_configs(sub_name, password, None)
+        proxy_configs = self.generate_proxy_configs(sub_name, password, user)
         return [config["name"] for config in proxy_configs]
 
     def get_proxy_urls(
@@ -460,6 +515,11 @@ class ProxyConfig:
 
         for config in proxy_configs:
             protocol = config.get("type", "")
+            if config.get("network") == "xhttp":
+                url = self._generate_xhttp_url(config)
+                if url:
+                    urls.append(url)
+                continue
             if protocol == "hysteria2":
                 if config.get("port") == settings.hysteria2_v2_port:
                     user_password = (
@@ -610,6 +670,29 @@ class ProxyConfig:
         config_b64 = base64.b64encode(config_json.encode()).decode()
 
         return f"vmess://{config_b64}?fragment=1,40-60,30-50"
+
+    @staticmethod
+    def _generate_xhttp_url(config: dict[str, Any]) -> str:
+        """Standard VLESS share link for an XHTTP entry (v2rayN / Hiddify / Happ / Shadowrocket).
+
+        Built from the mihomo proxy dict, so the link and the YAML can never disagree.
+        """
+        opts = config.get("xhttp-opts", {})
+        params = {
+            "encryption": "none",
+            "security": "tls",
+            "sni": config["servername"],
+            "fp": config.get("client-fingerprint", "chrome"),
+            "alpn": ",".join(config.get("alpn", [])),
+            "type": "xhttp",
+            "host": opts.get("host", config["servername"]),
+            "path": opts.get("path", "/"),
+        }
+        if opts.get("mode"):
+            params["mode"] = opts["mode"]
+        query = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+        name = urllib.parse.quote(config["name"])
+        return f"vless://{config['uuid']}@{config['server']}:{config['port']}?{query}#{name}"
 
     def _generate_vless_url(self, config: dict[str, Any]) -> str:
         """Generate VLESS URL for ShadowRocket.

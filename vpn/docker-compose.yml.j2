@@ -5,6 +5,11 @@
 {% set features = (host_cfg.get('features') if host_cfg is mapping else none) %}
 {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
 {% set relay = (forward_group and config.subs.get(forward_group)) %}
+{# XHTTP (XHTTP_PATH set) is an extra entry, not a replacement: Xray serves it on the hosts that
+   are the `host` of an xhttp subscription entry, next to the unchanged sing-box/hysteria stack. #}
+{% set ns_x = namespace(here=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
+{% set xhttp_here = (xhttp_path | default('') | string | length > 0) and ns_x.here %}
 services:
   xray:
     # Mirror of ghcr.io/xtls/xray-core:26.2.6 (byte-identical index, same digest).
@@ -19,8 +24,15 @@ services:
     volumes:
       - ./xray.json:/etc/xray/config.json:ro
     command: ["run", "-c", "/etc/xray/config.json"]
+    # Bridge network on purpose: a proxied request for 127.0.0.1 lands in the container, never on
+    # the host's loopback services. Caddy (host network) reaches the inbounds on these ports.
     ports:
       - "127.0.0.1:28443:28443"
+{% if xhttp_here %}
+      - "127.0.0.1:{{ xhttp_port | default(28480) }}:{{ xhttp_port | default(28480) }}"
+      # per-user traffic counters for json-exporter (/debug/vars)
+      - "127.0.0.1:11111:11111"
+{% endif %}
   sing-box:
     image: itdoginfo/sing-box:v1.14.4
     environment:
@@ -82,6 +94,10 @@ services:
       - XRAY_PRIVATEKEY={{ xray_privatekey }}
       - XRAY_PUBLICKEY={{ xray_publickey }}
       - XRAY_VERIFY={{ xray_verify }}
+      - XHTTP_PATH={{ xhttp_path | default('') }}
+      - XHTTP_MODE={{ xhttp_mode | default('') }}
+      - PROFILE_UPDATE_INTERVAL={{ profile_update_interval | default('') }}
+      - PROFILE_TITLE={{ profile_title | default('') }}
       - SALT={{ salt }}
       - IPV4_BLOCK_PREFIX=18
       - IPV6_BLOCK_PREFIX=32

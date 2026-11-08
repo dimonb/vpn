@@ -127,18 +127,22 @@
       ansible.builtin.set_fact:
         vpn_is_relay: "{{ (vpn_forward_group | trim | length > 0) and (vpn_forward_group | trim in (vpn_deploy_config.subs | default({}, true))) }}"
 
-    # A relay whose tunnel is not listening must not get the drop-in — pointing dockerd at
-    # a dead proxy would break pulls that work perfectly well direct. `ignore_errors` (not
-    # `failed_when: false`) on purpose: the latter would force `failed=False` and leave
-    # nothing to branch on.
-    - name: Probe the relay tunnel proxy
-      ansible.builtin.wait_for:
-        host: "{{ tunnel_proxy_gateway | default('172.29.77.1') }}"
-        port: "{{ tunnel_proxy_port | default(1080) }}"
-        timeout: 5
+    # A relay whose tunnel does not actually carry traffic must not get the drop-in — pointing
+    # dockerd at a dead proxy would break pulls that work perfectly well direct. A listening
+    # port proves nothing (sing-box accepts on cfgapp-in even when every exit is dead), so this
+    # fetches the registry through it: 200/401 = the tunnel works. `ignore_errors` (not
+    # `failed_when: false`) on purpose: the latter would leave nothing to branch on.
+    - name: Probe the relay tunnel proxy with a real registry request
+      ansible.builtin.command:
+        argv: [curl, -s, -o, /dev/null, -m, "15", -w, "%{http_code}", "https://registry-1.docker.io/v2/"]
+      environment:
+        https_proxy: "http://cfgapp:{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}@{{ tunnel_proxy_gateway | default('172.29.77.1') }}:{{ tunnel_proxy_port | default(1080) }}"
       when: vpn_is_relay | bool
       register: vpn_tunnel_probe
+      changed_when: false
+      failed_when: vpn_tunnel_probe.stdout | default('') not in ['200', '401']
       ignore_errors: true
+      no_log: true
 
     - name: Decide whether the docker daemon should pull through the tunnel
       ansible.builtin.set_fact:
@@ -148,8 +152,8 @@
       ansible.builtin.debug:
         msg: >-
           Tunnel proxy {{ tunnel_proxy_gateway | default('172.29.77.1') }}:{{ tunnel_proxy_port | default(1080) }}
-          is not listening — docker will pull directly. Expected on a host whose vpn-tunnel
-          bridge does not exist yet; otherwise check sing-box.
+          does not carry traffic — docker will pull directly. Expected on a host whose vpn-tunnel
+          bridge does not exist yet; otherwise check sing-box and the relay's exits.
       when: (vpn_is_relay | bool) and not (vpn_docker_via_tunnel | bool)
 
     - name: Ensure the docker service drop-in directory exists
