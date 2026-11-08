@@ -11,7 +11,7 @@ services:
     # ghcr.io is blocked from Russian networks, docker.io is not — pulling upstream
     # directly makes every RU deploy depend on the sing-box tunnel already being up,
     # which a fresh host does not have. Re-mirror after a version bump: `make mirror-images`.
-    image: dimonb/xray-core:26.2.6
+    image: dimonb/xray-core:26.10.31
     restart: unless-stopped
     volumes:
       - ./xray.json:/etc/xray/config.json:ro
@@ -19,7 +19,7 @@ services:
     ports:
       - "127.0.0.1:28443:28443"
   sing-box:
-    image: itdoginfo/sing-box:v1.13.1
+    image: itdoginfo/sing-box:v1.14.4
     environment:
       - ENABLE_DEPRECATED_MISSING_DOMAIN_RESOLVER=true
     restart: unless-stopped
@@ -36,7 +36,7 @@ services:
       - ./hysteria.yaml:/etc/hysteria.yaml
     command: ["server", "-c", "/etc/hysteria.yaml"]
   proxy:
-    image: dimonb/caddy:latest
+    image: dimonb/caddy:2.11.9
     restart: unless-stopped
     network_mode: host
     volumes:

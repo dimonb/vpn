@@ -72,9 +72,8 @@
       "tag": "vless-in",
       "listen": "0.0.0.0",
       "listen_port": {{ vless_port | default(8443) }},
-      "sniff": true,
-      "sniff_override_destination": true,
-      "domain_strategy": "prefer_ipv4",
+      {# sniff / domain_strategy live in route.rules as rule actions — the inbound fields were
+         removed in sing-box 1.13+ and 1.14 refuses the config. #}
       "users": [
         {% for user in config.users %}
         {
@@ -259,6 +258,8 @@
        could not even complete the vless handshake (outage 2026-08-17..23). #}
     "default_domain_resolver": { "server": "{{ 'local-dns' if relay else 'quad9-doh' }}" },
     "rules": [
+      { "inbound": "vless-in", "action": "sniff" },
+      { "inbound": "vless-in", "action": "resolve", "strategy": "prefer_ipv4" },
       {# Reject, never dial: a client asking for 127.0.0.1 / a private / link-local address would
          otherwise land on THIS host's local-only services (caddy admin, exporters, FreeSWITCH
          ESL, the cloud metadata endpoint). Nothing legitimate reaches private space via a proxy. #}
@@ -355,6 +356,17 @@
     "final": {% if forward_group and config.subs.get(forward_group) %}"auto"{% elif forward_il_group and config.subs.get(forward_il_group) %}"auto-il"{% else %}"direct-out"{% endif %}
   }
   {% else %}
-  "outbounds": [{ "type": "direct", "tag": "direct-out" }]
+  "outbounds": [{ "type": "direct", "tag": "direct-out" }],
+  {# Exits need a route too: sing-box 1.14 requires a default domain resolver, and without the
+     reject rule a client could reach this host's loopback/private services through the proxy. #}
+  "route": {
+    "default_domain_resolver": { "server": "quad9-doh" },
+    "rules": [
+      { "inbound": "vless-in", "action": "sniff" },
+      { "inbound": "vless-in", "action": "resolve", "strategy": "prefer_ipv4" },
+      { "ip_is_private": true, "action": "reject" }
+    ],
+    "final": "direct-out"
+  }
   {% endif %}
 }
