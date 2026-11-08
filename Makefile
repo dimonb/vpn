@@ -42,10 +42,11 @@ SERVERS_FILE ?= "servers.cfg"
 # Test mode - limit to specific instance
 TEST_ONLY ?= ""
 
-# Optional XHTTP mode and mihomo subscription headers (env.example). Read from the
-# sourced ENV_FILE in the recipe's shell, so values may contain spaces (PROFILE_TITLE). Empty =
-# feature off: the templates then render as before.
-XRAY_ENV_ARGS := -e "xhttp_path=$${XHTTP_PATH:-}" -e "xhttp_port=$${XHTTP_PORT:-28480}" -e "xhttp_mode=$${XHTTP_MODE:-}" -e "profile_update_interval=$${PROFILE_UPDATE_INTERVAL:-}" -e "profile_title=$${PROFILE_TITLE:-}"
+# Optional XHTTP entry and mihomo subscription headers (env.example), read from the sourced
+# ENV_FILE in the recipe's shell. Empty = feature off: the templates render as before.
+# ansible splits `-e k=v` on spaces, so the value is single-quoted inside the argument:
+# PROFILE_TITLE may contain spaces (not a single quote).
+XRAY_ENV_ARGS := -e "xhttp_path=$${XHTTP_PATH:-}" -e "xhttp_port=$${XHTTP_PORT:-28480}" -e "xhttp_mode=$${XHTTP_MODE:-}" -e "profile_update_interval=$${PROFILE_UPDATE_INTERVAL:-}" -e "profile_title='$${PROFILE_TITLE:-}'"
 
 # Common Ansible arguments
 ANSIBLE_ARGS := -i $(SERVERS_FILE) --ssh-extra-args='-o ControlPersist=60s'$(if $(filter-out "",$(TEST_ONLY)), --limit $(TEST_ONLY),)
@@ -53,7 +54,7 @@ ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" 
 
 # Upstream images that live on a registry unreachable from Russian networks, mirrored
 # into docker.io/dimonb/*. Format: <source>=<target>.
-MIRROR_IMAGES := ghcr.io/xtls/xray-core:26.10.31=dimonb/xray-core:26.10.31
+MIRROR_IMAGES := ghcr.io/xtls/xray-core:26.2.6=dimonb/xray-core:26.2.6
 
 .PHONY: install-docker check-env deploy deploy-test cn passwords ubuntu-update ubuntu-upgrade amneziawg-install mirror-images
 

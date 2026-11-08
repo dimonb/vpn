@@ -4,16 +4,15 @@
 {% set host_cfg = (proxy_cfg.get(ansible_host) if proxy_cfg is mapping and proxy_cfg.get(ansible_host) else none) %}
 {% set features = (host_cfg.get('features') if host_cfg is mapping else none) %}
 {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
-{# XHTTP mode (XHTTP_PATH set) replaces the legacy user stack: no sing-box, no hysteria; Xray
-   serves users (XHTTP) and, on the relay entry, the tunnel proxy cfgapp and docker use. The
-   relay is then the host named as `host` of an xhttp entry with an `exit`. #}
-{% set xhttp_on = (xhttp_path | default('') | string | length > 0) %}
-{% set ns = namespace(xhttp_relay=false) %}
-{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host and _it.get('exit') %}{% set ns.xhttp_relay = true %}{% endif %}{% endfor %}{% endfor %}
-{% set relay = ns.xhttp_relay if xhttp_on else (forward_group and config.subs.get(forward_group)) %}
+{% set relay = (forward_group and config.subs.get(forward_group)) %}
+{# XHTTP (XHTTP_PATH set) is an extra entry, not a replacement: Xray serves it on the hosts that
+   are the `host` of an xhttp subscription entry, next to the unchanged sing-box/hysteria stack. #}
+{% set ns_x = namespace(here=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
+{% set xhttp_here = (xhttp_path | default('') | string | length > 0) and ns_x.here %}
 services:
   xray:
-    # Mirror of ghcr.io/xtls/xray-core:26.10.31 (byte-identical index, same digest).
+    # Mirror of ghcr.io/xtls/xray-core:26.2.6 (byte-identical index, same digest).
     # ghcr.io is blocked from Russian networks, docker.io is not — pulling upstream
     # directly makes every RU deploy depend on the sing-box tunnel already being up,
     # which a fresh host does not have. Re-mirror after a version bump: `make mirror-images`.
@@ -22,13 +21,18 @@ services:
     # sing-box-based apps. Re-test with a sing-box client before bumping.
     image: dimonb/xray-core:26.2.6
     restart: unless-stopped
-    # Host network: on a relay the tunnel proxy listens on the vpn-tunnel bridge gateway (as
-    # sing-box did); every other inbound is on 127.0.0.1 behind caddy.
-    network_mode: host
     volumes:
       - ./xray.json:/etc/xray/config.json:ro
     command: ["run", "-c", "/etc/xray/config.json"]
-{% if not xhttp_on %}
+    # Bridge network on purpose: a proxied request for 127.0.0.1 lands in the container, never on
+    # the host's loopback services. Caddy (host network) reaches the inbounds on these ports.
+    ports:
+      - "127.0.0.1:28443:28443"
+{% if xhttp_here %}
+      - "127.0.0.1:{{ xhttp_port | default(28480) }}:{{ xhttp_port | default(28480) }}"
+      # per-user traffic counters for json-exporter (/debug/vars)
+      - "127.0.0.1:11111:11111"
+{% endif %}
   sing-box:
     image: itdoginfo/sing-box:v1.14.4
     environment:
@@ -46,7 +50,6 @@ services:
       - ./cert:/cert
       - ./hysteria.yaml:/etc/hysteria.yaml
     command: ["server", "-c", "/etc/hysteria.yaml"]
-{% endif %}
   proxy:
     image: dimonb/caddy:2.11.9
     restart: unless-stopped

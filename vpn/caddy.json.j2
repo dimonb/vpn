@@ -29,16 +29,13 @@
         "l4": {
           "listen": [":443"],
           "routes": [
-{% if not (xhttp_path | default('') | string) %}
-            {# sing-box REALITY for users; gone in XHTTP mode. #}
             {
               "match": [{ "tls": { "sni": ["ok.ru"] } }],
               "handle": [
                 { "handler": "proxy", "upstreams": [{ "dial": ["127.0.0.1:8443"] }] }
               ]
             },
-{% endif %}
-            {# Xray REALITY: in XHTTP mode only the relay account `system` (the relay → exit link). #}
+            {# Xray REALITY: users, and the relay → exit link (account `system`). #}
             {
               "match": [{ "tls": { "sni": ["www.icloud.com", "icloud.com"] } }],
               "handle": [

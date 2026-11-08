@@ -91,9 +91,33 @@ def test_xhttp_needs_a_user_and_a_path(xray_settings, proxy_config, monkeypatch)
     assert proxy_config.generate_proxy_configs("regions", None, "alice") == []
 
 
-def test_share_links_skip_xhttp(xray_settings, proxy_config):
-    # XHTTP entries are for mihomo subscriptions; the link formats do not describe them.
-    assert proxy_config.get_proxy_urls("regions", None, "alice") == []
+def test_share_links_describe_xhttp(xray_settings, proxy_config, monkeypatch):
+    # Non-mihomo clients get the standard VLESS + XHTTP link with the same per-exit id.
+    monkeypatch.setattr(settings, "xhttp_mode", "packet-up")
+    urls = proxy_config.get_proxy_urls("regions", None, "alice")
+    assert len(urls) == 2
+    parsed = urllib.parse.urlsplit(urls[0])
+    assert parsed.scheme == "vless"
+    assert parsed.username == vless_id(f"alice.exit-ie.example.net.{SALT}")
+    assert parsed.hostname == "entry.example.net" and parsed.port == 443
+    q = dict(urllib.parse.parse_qsl(parsed.query))
+    assert q == {
+        "encryption": "none",
+        "security": "tls",
+        "sni": "entry.example.net",
+        "fp": "chrome",
+        "alpn": "h2",
+        "type": "xhttp",
+        "host": "entry.example.net",
+        "path": "/secretpath",
+        "mode": "packet-up",
+    }
+    assert urllib.parse.unquote(parsed.fragment) == "🇮🇪 Ireland"
+
+
+def test_share_links_need_a_user(xray_settings, proxy_config):
+    # Ids are per user: without one the xhttp entries are left out, as in the YAML.
+    assert proxy_config.get_proxy_urls("regions", None, None) == []
 
 
 def test_subscription_headers_off_by_default(xray_settings):

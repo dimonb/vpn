@@ -516,7 +516,9 @@ class ProxyConfig:
         for config in proxy_configs:
             protocol = config.get("type", "")
             if config.get("network") == "xhttp":
-                # XHTTP entries are served as mihomo subscriptions only.
+                url = self._generate_xhttp_url(config)
+                if url:
+                    urls.append(url)
                 continue
             if protocol == "hysteria2":
                 if config.get("port") == settings.hysteria2_v2_port:
@@ -668,6 +670,29 @@ class ProxyConfig:
         config_b64 = base64.b64encode(config_json.encode()).decode()
 
         return f"vmess://{config_b64}?fragment=1,40-60,30-50"
+
+    @staticmethod
+    def _generate_xhttp_url(config: dict[str, Any]) -> str:
+        """Standard VLESS share link for an XHTTP entry (v2rayN / Hiddify / Happ / Shadowrocket).
+
+        Built from the mihomo proxy dict, so the link and the YAML can never disagree.
+        """
+        opts = config.get("xhttp-opts", {})
+        params = {
+            "encryption": "none",
+            "security": "tls",
+            "sni": config["servername"],
+            "fp": config.get("client-fingerprint", "chrome"),
+            "alpn": ",".join(config.get("alpn", [])),
+            "type": "xhttp",
+            "host": opts.get("host", config["servername"]),
+            "path": opts.get("path", "/"),
+        }
+        if opts.get("mode"):
+            params["mode"] = opts["mode"]
+        query = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+        name = urllib.parse.quote(config["name"])
+        return f"vless://{config['uuid']}@{config['server']}:{config['port']}?{query}#{name}"
 
     def _generate_vless_url(self, config: dict[str, Any]) -> str:
         """Generate VLESS URL for ShadowRocket.

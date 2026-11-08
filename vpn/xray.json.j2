@@ -12,9 +12,13 @@
 {% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host and _it.get('exit') and _it.exit not in relay_exits %}{% set _ = relay_exits.append(_it.exit) %}{% endif %}{% endfor %}{% endfor %}
 {#- Users enter only where the subscription points: xhttp-in (and caddy's route) exist on a host
     that is the `host` of some xhttp entry. Exits reached through a relay need neither. #}
-{% set ns_x = namespace(here=false) %}
-{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
+{% set ns_x = namespace(here=false, direct=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% if not _it.get('exit') %}{% set ns_x.direct = true %}{% endif %}{% endif %}{% endfor %}{% endfor %}
 {% set xhttp_here = xhttp_path and ns_x.here %}
+{#- An entry without `exit` makes this host the exit for that user's own id (sha256("<user>.<SALT>")). #}
+{% set xhttp_direct = xhttp_here and ns_x.direct %}
+{% set relay_exits = relay_exits if xhttp_here else [] %}
+{% set routing = (config.get('routing') if config.get('routing') is mapping else {}) %}
 {% macro vless_id(seed) %}{{ seed | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}{% endmacro %}
 {
   "log": {
@@ -25,10 +29,7 @@
     "maskAddress": ""
   },
   "routing": {
-    "domainStrategy": "IPIfNonMatch",{% if xhttp_path and relay_exits %}
-    "balancers": [
-      { "tag": "exits", "selector": ["to-"], "strategy": { "type": "leastPing" }, "fallbackTag": "to-{{ relay_exits[0] }}" }
-    ],{% endif %}
+    "domainStrategy": "IPIfNonMatch",
     "rules": [
       {
         "ip": [
@@ -43,17 +44,22 @@
           "bittorrent"
         ],
         "type": "field"
-      }{% if xhttp_path and relay_exits %},
-      {
-        "inboundTag": ["cfgapp-in"],
-        "balancerTag": "exits"
-      },
-      {# Russian destinations leave here (clients normally send them direct already). #}
+      }{% if relay_exits %},
+      {# Russian destinations leave here (clients normally send them direct already), plus
+         config.routing.direct_domains, as on the sing-box relay. #}
       {
         "inboundTag": ["xhttp-in"],
-        "domain": ["domain:ru", "domain:su", "domain:xn--p1ai", "geosite:category-ru"],
+        "domain": ["domain:ru", "domain:su", "domain:xn--p1ai", "geosite:category-ru"{% for _d in (routing.get('direct_domains') or []) %}, "domain:{{ _d }}"{% endfor %}],
         "outboundTag": "direct"
       },
+      {# config.routing.pin {"<domain>": "<exit host>"}: only for exits this entry relays to. #}
+      {% for _domain, _exit in (routing.get('pin') or {}).items() %}{% if _exit in relay_exits %}
+      {
+        "inboundTag": ["xhttp-in"],
+        "domain": ["domain:{{ _domain }}"],
+        "outboundTag": "to-{{ _exit }}"
+      },
+      {% endif %}{% endfor %}
       {
         "inboundTag": ["xhttp-in"],
         "ip": ["geoip:ru"],
@@ -65,7 +71,14 @@
         "user": [{% for user in config.users %}"{{ user }}@{{ exit }}"{% if not loop.last %}, {% endif %}{% endfor %}],
         "outboundTag": "to-{{ exit }}"
       },
-      {% endfor %}
+      {% endfor %}{% if xhttp_direct %}
+      {# Users of an exit-less entry on this host leave from here. #}
+      {
+        "inboundTag": ["xhttp-in"],
+        "user": [{% for user in config.users %}"{{ user }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        "outboundTag": "direct"
+      },
+      {% endif %}
       {# Fail closed: a relay user that matched no exit never leaves from this host. #}
       {
         "inboundTag": ["xhttp-in"],
@@ -76,13 +89,13 @@
   "dns": null,
   "inbounds": [
     {
-      "listen": "127.0.0.1",
+      "listen": "0.0.0.0",
       "port": {{ xray_reality_port | default(28443) }},
       "protocol": "vless",
       "settings": {
         "clients": [
-          {# XHTTP mode: users no longer connect here; only the relay's account remains. #}
-          {% for user in (['system'] if xhttp_path else config.users) %}
+          {# Every user, as before; `system` (in config.users) is also the relay → exit account. #}
+          {% for user in config.users %}
           {
             "email": "{{ user }}",
             "flow": "xtls-rprx-vision",
@@ -145,34 +158,20 @@
         "metadataOnly": false,
         "routeOnly": true
       }
-    }{% if xhttp_path and relay_exits %},
-    {# The tunnel proxy cfgapp (origin fetches) and dockerd (pulls) use on a relay, which used to
-       be sing-box's `cfgapp-in`: same address, port and password; out via the exits. #}
-    {
-      "tag": "cfgapp-in",
-      "listen": "{{ tunnel_proxy_gateway | default('172.29.77.1') }}",
-      "port": {{ tunnel_proxy_port | default(1080) }},
-      "protocol": "http",
-      "settings": {
-        "accounts": [{ "user": "cfgapp", "pass": "{{ ('cfgapp-proxy.' + salt) | hash('sha256') }}" }]
-      }
-    }{% endif %}{% if xhttp_here %},
+    }{% if xhttp_here %},
     {
       "tag": "xhttp-in",
-      "listen": "127.0.0.1",
+      "listen": "0.0.0.0",
       "port": {{ xhttp_port | default(28480) }},
       "protocol": "vless",
       "settings": {
         "clients": [
-          {% if relay_exits %}
-          {% for exit in relay_exits %}{% set outer = loop %}{% for user in config.users %}
-          { "email": "{{ user }}@{{ exit }}", "id": "{{ vless_id(user + '.' + exit + '.' + salt) }}" }{% if not (loop.last and outer.last) %},{% endif %}
-          {% endfor %}{% endfor %}
-          {% else %}
-          {% for user in config.users %}
-          { "email": "{{ user }}", "id": "{{ vless_id(user + '.' + salt) }}" }{% if not loop.last %},{% endif %}
+          {% set ids = [] %}
+          {% for exit in relay_exits %}{% for user in config.users %}{% set _ = ids.append((user ~ '@' ~ exit, user ~ '.' ~ exit ~ '.' ~ salt)) %}{% endfor %}{% endfor %}
+          {% if xhttp_direct or not relay_exits %}{% for user in config.users %}{% set _ = ids.append((user, user ~ '.' ~ salt)) %}{% endfor %}{% endif %}
+          {% for email, seed in ids %}
+          { "email": "{{ email }}", "id": "{{ vless_id(seed) }}" }{% if not loop.last %},{% endif %}
           {% endfor %}
-          {% endif %}
         ],
         "decryption": "none"
       },
@@ -204,7 +203,7 @@
       "protocol": "blackhole",
       "settings": {},
       "tag": "blocked"
-    }{% if xhttp_path %}{% for exit in relay_exits %},
+    }{% if relay_exits %}{% for exit in relay_exits %},
     {
       "tag": "to-{{ exit }}",
       "protocol": "vless",
@@ -254,15 +253,11 @@
   "stats": {},
   "reverse": null,
   "fakedns": null,
-  "observatory": {% if xhttp_path and relay_exits %}{
-    "subjectSelector": ["to-"],
-    "probeUrl": "https://www.gstatic.com/generate_204",
-    "probeInterval": "1m",
-    "enableConcurrency": true
-  }{% else %}null{% endif %},
+  "observatory": null,
   "burstObservatory": null,
   "metrics": {
-    "listen": "127.0.0.1:11111",
+    {# In the container; compose publishes it on the host's 127.0.0.1 only where XHTTP runs. #}
+    "listen": "{{ '0.0.0.0' if xhttp_here else '127.0.0.1' }}:11111",
     "tag": "metrics_out"
   }
 }

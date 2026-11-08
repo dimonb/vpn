@@ -446,28 +446,26 @@ client ──443, SNI = the host's own name──▶ caddy l4 default ─▶ :44
              └─ otherwise: id = sha256("<user>.<SALT>") ─▶ direct (this host is the exit)
 ```
 
-## XHTTP entry, the relay on Xray, and the mihomo subscription
+## XHTTP entry and the mihomo subscription
 
-Off unless `XHTTP_PATH` is set in the ENV_FILE; a profile without it renders exactly as before apart from Xray's own move (below).
+Off unless `XHTTP_PATH` is set in the ENV_FILE; without it every template renders exactly as before.
 
-**XHTTP mode replaces the legacy user stack** (on purpose: users must re-import the new
-subscription; old entries stop working at the deploy). With `XHTTP_PATH` set:
+**XHTTP is an extra entry, not a replacement.** Nothing of the existing stack changes: sing-box
+(REALITY `ok.ru`, hy2), the hysteria server, Xray REALITY `www.icloud.com` with every user, the
+relay tunnel proxy (`cfgapp-in` on sing-box) and `/hy2/metrics` stay as they are, so existing
+subscriptions keep working and users move over at their own pace. With `XHTTP_PATH` set:
 
-- no `sing-box` and no `hysteria` containers (`up --remove-orphans` removes them), so no user
-  REALITY on `ok.ru`, no hy2/hy2-v2 ports; caddy drops the `ok.ru` route;
-- the Xray REALITY inbound accepts **only `system`**: it stays as the relay → exit link, old
-  REALITY users are refused;
-- the relay's tunnel proxy (`cfgapp-in`: same address, port, user and password, so cfgapp's
-  `HTTP(S)_PROXY` and the docker drop-in are unchanged) is an Xray `http` inbound balanced
-  (`leastPing`, probed every minute) over the `to-<exit>` outbounds; `deploy_vpn.yml` finds the
-  relay from the xhttp entries instead of `proxy.<host>.features`;
-- XHTTP itself is only rendered (xray inbound + caddy route) on hosts that are the `host` of an
-  xhttp entry — exits reached through the relay do not answer it;
-- `/hy2/metrics` now serves `xray_user_{uplink,downlink}_bytes_total{user="<user>@<exit>"}` from
-  Xray's `/debug/vars` (json-exporter), instead of `hy2_user_*` — update dashboards/alerts (the path
-  keeps its name so the scrape config does not change).
+- only hosts that are the `host` of an `xhttp` subscription entry get the `xhttp-in` inbound, the
+  caddy route for `/<XHTTP_PATH>/*` and the published `127.0.0.1:XHTTP_PORT`; others are unchanged;
+- on such a host, an entry **with** `exit` adds a `to-<exit>` outbound (VLESS + REALITY
+  `www.icloud.com`, account `system`, the exits' existing inbound) and per-user-per-exit ids; an
+  entry **without** `exit` makes this host the exit for the user's own id;
+- `/hy2/metrics` additionally carries `xray_user_{uplink,downlink}_bytes_total{user="<user>[@<exit>]"}`
+  from Xray's `/debug/vars` (published on `127.0.0.1:11111` only on XHTTP hosts).
 
-Without `XHTTP_PATH` (e.g. a profile not migrated yet) everything renders as before.
+Xray stays in its bridge network (a proxied request for 127.0.0.1 lands in the container, not on the
+host's loopback services) and **on 26.2.6**: XHTTP needs nothing newer, and 26.10.31 as a REALITY
+server rejects sing-box clients, which would cut off relays using `vless-v2` and sing-box-based apps.
 
 **Why an entry in Russia, and why its own name.** Measured 2026-11 from a Russian home ISP: TLS to
 addresses of large cloud providers (several regions) *freezes after 16 KB* when the SNI is
@@ -480,7 +478,7 @@ the existing REALITY inbound. **Test a new host with a response larger than 16 K
 or `/health` proves nothing): e.g. `curl --interface <phys-if> --resolve <host>:443:<ip>
 https://<host>/<a template path>` must return the full body.
 
-**Configuration.** Regions are subscription entries; the relay derives everything from them:
+**Configuration.** Regions are subscription entries; the entry derives everything from them:
 
 ```json
 "subs": { "regions": {
@@ -490,7 +488,9 @@ https://<host>/<a template path>` must return the full body.
 
 - On `<entry host>` (`ansible_host` equal to `host`), `xray.json.j2` renders one `xhttp-in` client per
   user per exit (email `<user>@<exit>`), one `to-<exit>` outbound per exit, and routing by user. RU
-  destinations leave the entry directly; anything unmatched is blocked, never sent out from the entry.
+  destinations and `config.routing.direct_domains` leave the entry directly, `config.routing.pin`
+  sends a domain to its pinned exit (if this entry relays to it); anything unmatched is blocked,
+  never sent out from the entry.
 - `cfgapp` renders the same entries for mihomo (`protocol: xhttp` → `type: vless`, `network: xhttp`,
   `servername` = the entry host, the per-exit id), so the server and the subscription cannot drift.
 - An `xhttp` entry **without** `exit` is a direct exit on its own host (per-user id).
@@ -501,14 +501,14 @@ https://<host>/<a template path>` must return the full body.
 `PROFILE_UPDATE_INTERVAL` sends `profile-update-interval` (hours; mihomo clients refresh on it —
 Clash Mi only when "prefer the profile's interval" is on), `PROFILE_TITLE` the profile name.
 
-**Xray's container changed** (all profiles): `network_mode: host` (on a relay the tunnel proxy listens on
-the `vpn-tunnel` bridge gateway, as sing-box did; every other inbound is on 127.0.0.1 behind caddy),
-image 26.10.31 — **run `make mirror-images` before the first deploy** so RU hosts can pull it. The
-REALITY inbound listens on 127.0.0.1 (`xray_reality_port`, default 28443), as caddy dials it.
+**Transports.** hy2 does not suit this path: from some Russian networks UDP *flows* to foreign
+clouds are cut after a few KB, and hy2 on the entry would leave from the entry, not the chosen
+exit. Users reach the entry over XHTTP (TCP, the host's own name); the entry reaches exits over
+REALITY (TCP, `www.icloud.com`), which passes where hy2 does not.
 
-**No hy2 for users.** From Russian networks UDP to the exits' addresses did not come back (client
-packets arrived, replies never did), and hy2 on the relay entry would leave from the entry itself, not
-the chosen exit. XHTTP through the relay is the only user transport.
+**Share links.** Besides the mihomo YAML, every `xhttp` entry is also emitted as a standard
+`vless://…?type=xhttp&security=tls…` link in the URL subscriptions (v2rayN / Hiddify / Happ /
+Shadowrocket), with the same per-exit id.
 
 **Testing without production credentials** (how this was verified): render with throwaway values,
 run the rendered xray on a spare host next to the live one (`xray_reality_port`/`xhttp_port`
