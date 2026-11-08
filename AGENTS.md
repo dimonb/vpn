@@ -469,6 +469,10 @@ host's loopback services) and **on 26.7.28**, the newest REALITY server sing-box
 minimum of 26.3.27 that sing-box does not report, so the template sets `"0.0.0"` explicitly. Since
 26.9.9 the server rejects any ClientHello without an X25519MLKEM768 key share; sing-box strips it
 (mihomo sends it only with `reality-opts.support-x25519mlkem768: true`), so 26.9+ cuts them off.
+Two of those are handled here: the hosts run sing-box with `vpn/sing-box/reality-mlkem.patch`
+(`make sing-box-image`, which drops that filter), and cfgapp sets the mihomo flag on `vless-v2`
+entries. Before moving Xray past 26.7.x, check the remaining clients: sing-box-based apps
+(SFI/SFA/Hiddify) still strip the key share; Shadowrocket and Xray-core apps send it.
 
 **Why an entry in Russia, and why its own name.** Measured 2026-11 from a Russian home ISP: TLS to
 addresses of large cloud providers (several regions) *freezes after 16 KB* when the SNI is

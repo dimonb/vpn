@@ -56,7 +56,7 @@ ANSIBLE_ENV_ARGS := -e "salt=$${SALT:-}" -e "obfs_password=$${OBFS_PASSWORD:-}" 
 # into docker.io/dimonb/*. Format: <source>=<target>.
 MIRROR_IMAGES := ghcr.io/xtls/xray-core:26.7.28=dimonb/xray-core:26.7.28
 
-.PHONY: install-docker check-env deploy deploy-test cn passwords ubuntu-update ubuntu-upgrade amneziawg-install mirror-images
+.PHONY: install-docker check-env deploy deploy-test cn passwords ubuntu-update ubuntu-upgrade amneziawg-install mirror-images sing-box-image
 
 install-docker:
 	ansible-playbook $(ANSIBLE_ARGS) -f 4 install_docker.yml
@@ -75,6 +75,25 @@ mirror-images:
 	  echo "    upstream: $$(crane digest $$src)"; \
 	  echo "    mirror:   $$(crane digest $$dst)"; \
 	done
+
+# sing-box with vpn/sing-box/*.patch applied, built with upstream's own Dockerfile and tags and
+# pushed as docker.io/$(SING_BOX_IMAGE) (amd64 + arm64; one platform at a time, as two
+# parallel Go builds get killed in a small Docker Desktop VM). The patch keeps the X25519MLKEM768
+# key share in the REALITY ClientHello, which Xray 26.9+ REALITY servers require; upstream
+# strips it. Bump SING_BOX_VERSION, re-run, then update the tag in vpn/docker-compose.yml.j2.
+SING_BOX_VERSION ?= v1.14.4
+SING_BOX_IMAGE ?= dimonb/sing-box:$(SING_BOX_VERSION)-mlkem
+SING_BOX_SRC := .build/sing-box-$(SING_BOX_VERSION)
+sing-box-image:
+	@set -e; \
+	[ -d $(SING_BOX_SRC) ] || git clone -q --depth 1 --branch $(SING_BOX_VERSION) https://github.com/SagerNet/sing-box.git $(SING_BOX_SRC); \
+	git -C $(SING_BOX_SRC) checkout -q -- .; \
+	for p in vpn/sing-box/*.patch; do echo "==> $$p"; git -C $(SING_BOX_SRC) apply "$(CURDIR)/$$p"; done; \
+	for a in amd64 arm64; do \
+	  echo "==> linux/$$a"; \
+	  docker buildx build --platform linux/$$a -t $(SING_BOX_IMAGE)-$$a --push $(SING_BOX_SRC); \
+	done; \
+	docker buildx imagetools create -t $(SING_BOX_IMAGE) $(SING_BOX_IMAGE)-amd64 $(SING_BOX_IMAGE)-arm64
 
 check-env:
 	@source $(ENV_FILE) 2>/dev/null || true; \

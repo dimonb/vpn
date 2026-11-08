@@ -35,7 +35,10 @@ services:
       - "127.0.0.1:11111:11111"
 {% endif %}
   sing-box:
-    image: itdoginfo/sing-box:v1.14.4
+    # Upstream sing-box plus vpn/sing-box/*.patch (`make sing-box-image`): its REALITY client
+    # keeps the X25519MLKEM768 key share that Xray 26.9+ REALITY servers require.
+    image: dimonb/sing-box:v1.14.4-mlkem
+    command: ["run", "-c", "/etc/sing-box/config.json"]
     environment:
       - ENABLE_DEPRECATED_MISSING_DOMAIN_RESOLVER=true
     restart: unless-stopped

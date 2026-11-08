@@ -425,6 +425,10 @@ class ProxyConfig:
                 "short-id": "3e3e",
                 "show": False,
                 "spider-x": "/",
+                # mihomo strips the X25519MLKEM768 key share from REALITY ClientHellos unless
+                # told otherwise; Xray 26.9+ REALITY servers reject a ClientHello without it.
+                # Older Xray servers accept it too.
+                "support-x25519mlkem768": True,
             },
         }
 

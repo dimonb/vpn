@@ -190,6 +190,20 @@ class TestProxyConfig:
             )  # user:password format
 
     @patch("src.proxy_config.settings")
+    def test_vless_v2_config_keeps_the_mlkem_key_share(
+        self, mock_settings, config_file: Path
+    ) -> None:
+        """Xray 26.9+ REALITY servers require X25519MLKEM768; mihomo sends it only on request."""
+        mock_settings.salt = "test-salt"
+        mock_settings.https_port = 443
+        mock_settings.xray_publickey = "test-xray-public-key"
+        mock_settings.xray_verify = "test-verify"
+        proxy_config = ProxyConfig(str(config_file))
+        config = proxy_config._generate_vless_v2_config("ru-2.example.net", "RU_2", "testuser")
+        assert config["reality-opts"]["support-x25519mlkem768"] is True
+        assert config["reality-opts"]["public-key"] == "test-xray-public-key"
+
+    @patch("src.proxy_config.settings")
     def test_generate_hysteria2_config_with_password(
         self, mock_settings, config_file: Path
     ) -> None:
