@@ -229,8 +229,9 @@
           "serverName": "www.icloud.com",
           "fingerprint": "chrome",
           "publicKey": "{{ xray_publickey }}",
-          "shortId": "3e3e"{% if xray_verify | default('') %},
-          "mldsa65Verify": "{{ xray_verify }}"{% endif %}
+          {# No mldsa65Verify: Xray 26.2.6 refuses the profile's verify value here ("invalid
+             mldsa65Verify"), and the sing-box relays dial the same inbound without it. #}
+          "shortId": "3e3e"
         }
       }
     }{% endfor %}{% endif %}
