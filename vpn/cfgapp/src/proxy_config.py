@@ -761,6 +761,9 @@ class ProxyConfig:
             "xtls": "2",
             "pbk": public_key,
             "sid": short_id,
+            # Pin the Chrome fingerprint: its ClientHello carries the X25519MLKEM768 key share
+            # that Xray 26.9+ REALITY servers require.
+            "fp": "chrome",
         }
 
         # Add mldsa65 verify if present (might be useful depending on shadowrocket updates)

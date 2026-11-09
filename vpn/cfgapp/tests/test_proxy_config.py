@@ -2,6 +2,7 @@
 
 import json
 import tempfile
+import urllib.parse
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -202,6 +203,10 @@ class TestProxyConfig:
         config = proxy_config._generate_vless_v2_config("ru-2.example.net", "RU_2", "testuser")
         assert config["reality-opts"]["support-x25519mlkem768"] is True
         assert config["reality-opts"]["public-key"] == "test-xray-public-key"
+        # The Shadowrocket share link pins the same fingerprint.
+        url = proxy_config._generate_vless_v2_url(config)
+        query = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+        assert query["fp"] == "chrome"
 
     @patch("src.proxy_config.settings")
     def test_generate_hysteria2_config_with_password(
