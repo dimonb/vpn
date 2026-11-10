@@ -238,7 +238,7 @@ Examples:
 - Test hysteria (:47013) from the host itself: run a throwaway sing-box client (`docker run --network host <sing-box image> sing-box run -c c.json`, hysteria2 outbound to `127.0.0.1:47013` with user/pass + salamander from the rendered `hysteria.yaml`, mixed inbound on `127.0.0.1:18080`) and curl through `socks5h://127.0.0.1:18080`.
 - Before bumping Xray, test each client family (sing-box, mihomo, Shadowrocket, Xray-core apps) against two throwaway REALITY servers (old vs new, same keys) — test the exact share-link/profile params clients get (e.g. a missing `fp` changed the outcome). After a rollout watch per-host `REALITY: processed invalid connection` counts: prod Xray has `access: none`, so "accepted" is always 0 and rejects are the only signal.
 - Test a new exit from a relay by cloning the relay's real outbound to an existing exit (from its rendered `sing-box.json`) with `server` swapped, run it in a throwaway sing-box on the relay, curl through it. Plain `curl` from a relay host is not a valid check where the provider drops inbound foreign TCP — confirm with `tcpdump` on the far side (SYN arrives, SYN-ACK never acknowledged).
-- `make deploy` through a jump host (`--ssh-extra-args='-o ProxyJump=…'`) fails at the cfgapp copy: `ansible.posix.synchronize` (rsync) ignores the jump.
+- `make deploy` through a jump host (`--ssh-extra-args='-o ProxyJump=…'`) fails at the cfgapp copy: `ansible.posix.synchronize` (rsync) ignores the jump. Put `ProxyJump` in a `~/.ssh/config` `Host` block instead — rsync's ssh reads it.
 
 ### 13. Adding a VPN host
 
