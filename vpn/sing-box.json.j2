@@ -5,6 +5,11 @@
 {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
 {% set forward_il_group = (features.get('forward-il') if features is mapping else none) %}
 {% set relay = ((forward_group and config.subs.get(forward_group)) or (forward_il_group and config.subs.get(forward_il_group))) %}
+{#- Xray hands its XHTTP clients without an `exit` (e.g. a CDN entry on this relay) to the relay's
+    own routing through `xray-in`, so they get the same RU-direct / auto-exit treatment as vless-in. #}
+{% set ns_xr = namespace(direct=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and (_it.get('origin') or _it.host) == ansible_host and not _it.get('exit') %}{% set ns_xr.direct = true %}{% endif %}{% endfor %}{% endfor %}
+{% set xray_relay_in = (xhttp_path | default('') | string | length > 0) and ns_xr.direct and forward_group and config.subs.get(forward_group) %}
 {% set routing = (config.get('routing') if config is mapping and config.get('routing') is mapping else {}) %}
 {
   "dns": {
@@ -98,7 +103,19 @@
           "max_time_difference": "10m"
         }
       }
-    }{% if forward_group and config.subs.get(forward_group) %},
+    }{% if xray_relay_in %},
+    {
+      "type": "mixed",
+      "tag": "xray-in",
+      "listen": "{{ tunnel_proxy_gateway | default('172.29.77.1') }}",
+      "listen_port": {{ xray_relay_port | default(1081) }},
+      "users": [
+        {
+          "username": "xray",
+          "password": "{{ ('xray-relay.' + salt) | hash('sha256') }}"
+        }
+      ]
+    }{% endif %}{% if forward_group and config.subs.get(forward_group) %},
     {
       "type": "mixed",
       "tag": "cfgapp-in",
@@ -258,8 +275,8 @@
        could not even complete the vless handshake (outage 2026-08-17..23). #}
     "default_domain_resolver": { "server": "{{ 'local-dns' if relay else 'quad9-doh' }}" },
     "rules": [
-      { "inbound": "vless-in", "action": "sniff" },
-      { "inbound": "vless-in", "action": "resolve", "strategy": "prefer_ipv4" },
+      { "inbound": [{{ '"vless-in", "xray-in"' if xray_relay_in else '"vless-in"' }}], "action": "sniff" },
+      { "inbound": [{{ '"vless-in", "xray-in"' if xray_relay_in else '"vless-in"' }}], "action": "resolve", "strategy": "prefer_ipv4" },
       {# Reject, never dial: a client asking for 127.0.0.1 / a private / link-local address would
          otherwise land on THIS host's local-only services (caddy admin, exporters, FreeSWITCH
          ESL, the cloud metadata endpoint). Nothing legitimate reaches private space via a proxy. #}

@@ -86,6 +86,21 @@ class ProxyConfig:
 
         return subs.get(sub_name, {})
 
+    def _cdn_origins(self) -> set[str]:
+        """Hosts serving some xhttp entry through a CDN (`origin` set, `host` = the CDN name).
+
+        Their XHTTP inbound decrypts VLESS Encryption for every client (vpn/xray.json.j2), so
+        every xhttp entry served there must carry the encryption string, CDN or not.
+        """
+        return {
+            entry["origin"]
+            for items in self.get_subs().values()
+            for entry in items.values()
+            if entry.get("protocol") == "xhttp"
+            and entry.get("origin")
+            and entry.get("origin") != entry.get("host")
+        }
+
     def generate_proxy_configs(
         self,
         sub_name: str | None = None,
@@ -115,7 +130,12 @@ class ProxyConfig:
 
             if protocol == "xhttp":
                 generated = self._generate_xhttp_config(
-                    host, proxy_name, user, entry.get("exit")
+                    host,
+                    proxy_name,
+                    user,
+                    entry.get("exit"),
+                    entry.get("mode"),
+                    cdn=(entry.get("origin") or host) in self._cdn_origins(),
                 )
             else:
                 # Generate one config per proxy (not per user)
@@ -171,13 +191,24 @@ class ProxyConfig:
         return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
 
     def _generate_xhttp_config(
-        self, host: str, proxy_name: str, user: str | None, exit_host: str | None
+        self,
+        host: str,
+        proxy_name: str,
+        user: str | None,
+        exit_host: str | None,
+        mode: str | None = None,
+        cdn: bool = False,
     ) -> dict[str, Any]:
         """mihomo proxy: VLESS + XHTTP + TLS to <host>:443 (caddy, the host's own name).
 
         With ``exit_host`` the host is a relay entry and the id selects the exit
         (sha256("<user>.<exit>.<SALT>"), as vpn/xray.json.j2 renders it); without it
-        the host itself is the exit (sha256("<user>.<SALT>")).
+        the host itself is the exit (sha256("<user>.<SALT>")). ``host`` may also be a CDN
+        name in front of the entry's ``origin``; ``mode`` (the entry's own) overrides
+        XHTTP_MODE, e.g. packet-up for CDNs that do not stream request bodies. A ``cdn``
+        entry carries XHTTP_VLESS_ENCRYPTION (VLESS Encryption, so the CDN that terminates
+        TLS sees no VLESS headers) — so does any entry served on such an origin, whose inbound then
+        decrypts for everyone; without the string such entries are left out rather than sent bare.
         """
         if not user:
             logger.warning(f"xhttp entry {proxy_name}: ids are per user, no user given")
@@ -191,8 +222,20 @@ class ProxyConfig:
             else f"{user}.{settings.salt}"
         )
         xhttp_opts: dict[str, Any] = {"path": f"/{settings.xhttp_path}", "host": host}
-        if settings.xhttp_mode:
-            xhttp_opts["mode"] = settings.xhttp_mode
+        if mode or settings.xhttp_mode:
+            xhttp_opts["mode"] = mode or settings.xhttp_mode
+        if cdn and not settings.xhttp_vless_encryption:
+            logger.warning(f"xhttp entry {proxy_name}: CDN entry needs XHTTP_VLESS_ENCRYPTION")
+            return {}
+        extra: dict[str, Any] = {}
+        if cdn:
+            # Must match the origin's xhttp-in (vpn/xray.json.j2): the CDN in front proxies only
+            # GET/HEAD, so uploads ride in headers of GET requests, packet-up only.
+            xhttp_opts["mode"] = "packet-up"
+            extra = {
+                "encryption": settings.xhttp_vless_encryption,
+                "xhttp-extra": {"uplinkHTTPMethod": "GET", "uplinkDataPlacement": "header"},
+            }
         return {
             "name": proxy_name,
             "type": "vless",
@@ -206,6 +249,7 @@ class ProxyConfig:
             "client-fingerprint": "chrome",
             "network": "xhttp",
             "xhttp-opts": xhttp_opts,
+            **extra,
         }
 
     def _generate_hysteria2_config(
@@ -683,7 +727,7 @@ class ProxyConfig:
         """
         opts = config.get("xhttp-opts", {})
         params = {
-            "encryption": "none",
+            "encryption": config.get("encryption") or "none",
             "security": "tls",
             "sni": config["servername"],
             "fp": config.get("client-fingerprint", "chrome"),
@@ -694,6 +738,8 @@ class ProxyConfig:
         }
         if opts.get("mode"):
             params["mode"] = opts["mode"]
+        if config.get("xhttp-extra"):
+            params["extra"] = json.dumps(config["xhttp-extra"], separators=(",", ":"))
         query = urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
         name = urllib.parse.quote(config["name"])
         return f"vless://{config['uuid']}@{config['server']}:{config['port']}?{query}#{name}"

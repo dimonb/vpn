@@ -46,7 +46,7 @@ TEST_ONLY ?= ""
 # ENV_FILE in the recipe's shell. Empty = feature off: the templates render as before.
 # ansible splits `-e k=v` on spaces, so the value is single-quoted inside the argument:
 # PROFILE_TITLE may contain spaces (not a single quote).
-XRAY_ENV_ARGS := -e "xhttp_path=$${XHTTP_PATH:-}" -e "xhttp_port=$${XHTTP_PORT:-28480}" -e "xhttp_mode=$${XHTTP_MODE:-}" -e "profile_update_interval=$${PROFILE_UPDATE_INTERVAL:-}" -e "profile_title='$${PROFILE_TITLE:-}'"
+XRAY_ENV_ARGS := -e "xhttp_path=$${XHTTP_PATH:-}" -e "xhttp_port=$${XHTTP_PORT:-28480}" -e "xhttp_mode=$${XHTTP_MODE:-}" -e "xhttp_vless_decryption=$${XHTTP_VLESS_DECRYPTION:-}" -e "xhttp_vless_encryption=$${XHTTP_VLESS_ENCRYPTION:-}" -e "profile_update_interval=$${PROFILE_UPDATE_INTERVAL:-}" -e "profile_title='$${PROFILE_TITLE:-}'"
 
 # Common Ansible arguments
 ANSIBLE_ARGS := -i $(SERVERS_FILE) --ssh-extra-args='-o ControlPersist=60s'$(if $(filter-out "",$(TEST_ONLY)), --limit $(TEST_ONLY),)

@@ -1,7 +1,12 @@
 {% set config = lookup('file', config_file | default('config.json')) | from_json %}
-{% set ns_x = namespace(here=false) %}
-{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
+{% set ns_x = namespace(here=false, cdn=false) %}
+{% set cdn_names = [] %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and (_it.get('origin') or _it.host) == ansible_host %}{% set ns_x.here = true %}{% if _it.host != ansible_host %}{% set ns_x.cdn = true %}{% if _it.host not in cdn_names %}{% set _ = cdn_names.append(_it.host) %}{% endif %}{% endif %}{% endif %}{% endfor %}{% endfor %}
 {% set xhttp_here = (xhttp_path | default('') | string) and ns_x.here %}
+{#- CDN origin: an xhttp entry whose `host` is a CDN name and `origin` is this host. The CDN
+    connects with SNI = that name, which has no certificate here; serving this host's own one
+    instead is enough for a CDN that does not verify the origin name (Cloudflare "Full"). #}
+{% set cdn_origin = xhttp_here and ns_x.cdn %}
 {# Admin API off: every deploy recreates the container, so nothing needs live reloads, and an
    open 127.0.0.1:2019 lets anyone who reaches the host's loopback rewrite the whole config. #}
 {
@@ -86,6 +91,9 @@
           },
           "tls_connection_policies": [
             {
+{% if cdn_origin %}
+              "fallback_sni": "{{ ansible_host }}",
+{% endif %}
               "protocol_min": "tls1.2",
               "protocol_max": "tls1.3",
               "cipher_suites": [
@@ -122,6 +130,14 @@
                   "upstreams": [{ "dial": "127.0.0.1:{{ xhttp_port | default(28480) }}" }]
                 }
               ]
+            },
+{% endif %}
+{% if cdn_origin %}
+            {# The CDN name's own site (vpn/game/astray): a real page for everything but the
+               XHTTP path, so the name looks like what it serves. #}
+            {
+              "match": [{ "host": {{ cdn_names | to_json }} }],
+              "handle": [{ "handler": "file_server", "root": "/game/astray", "index_names": ["index.html"] }]
             },
 {% endif %}
             {

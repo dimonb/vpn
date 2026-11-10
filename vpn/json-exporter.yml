@@ -3,7 +3,7 @@
    (/debug/vars, stats.user."<user>[@<exit>]") as xray_user_{uplink,downlink}_bytes_total. #}
 {% set config = lookup('file', config_file | default('config.json')) | from_json %}
 {% set ns_x = namespace(here=false) %}
-{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and (_it.get('origin') or _it.host) == ansible_host %}{% set ns_x.here = true %}{% endif %}{% endfor %}{% endfor %}
 # json-exporter.yml  (Catawiki json_exporter)
 targets:
   - name: hy2

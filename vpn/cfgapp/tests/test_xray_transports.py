@@ -29,6 +29,7 @@ def xray_settings(monkeypatch):
     monkeypatch.setattr(settings, "https_port", 443)
     monkeypatch.setattr(settings, "profile_update_interval", "")
     monkeypatch.setattr(settings, "profile_title", "")
+    monkeypatch.setattr(settings, "xhttp_vless_encryption", "")
 
 
 @pytest.fixture
@@ -143,3 +144,81 @@ def test_subscription_title_non_ascii_is_base64(xray_settings, monkeypatch):
 def test_proxy_list_names_the_per_user_entries(xray_settings, proxy_config):
     # PROXY_LIST (the select group) must name exactly the entries PROXY_CONFIGS produced.
     assert proxy_config.get_proxy_list("regions", None, "alice") == ["🇮🇪 Ireland", "🇦🇲 Armenia"]
+
+
+@pytest.fixture
+def cdn_config(tmp_path: Path) -> ProxyConfig:
+    config = {
+        "users": ["alice"],
+        "subs": {
+            "cdn": {
+                "Game": {
+                    "protocol": "xhttp",
+                    "host": "game.example.net",
+                    "origin": "exit-se.example.net",
+                    "mode": "packet-up",
+                },
+            },
+        },
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(config))
+    return ProxyConfig(str(path))
+
+
+def test_cdn_entry_carries_vless_encryption_and_its_own_mode(
+    xray_settings, cdn_config, monkeypatch
+):
+    # The CDN terminates TLS, so the entry must carry VLESS Encryption; the id is the
+    # user's own (the origin is the exit), the client talks to the CDN name.
+    monkeypatch.setattr(settings, "xhttp_vless_encryption", "mlkem768x25519plus.random.0rtt.KEY")
+    game = cdn_config.generate_proxy_configs("cdn", None, "alice")[0]
+    assert game["server"] == "game.example.net"
+    assert game["servername"] == "game.example.net"
+    assert game["uuid"] == vless_id(f"alice.{SALT}")
+    assert game["xhttp-opts"]["mode"] == "packet-up"
+    assert game["encryption"] == "mlkem768x25519plus.random.0rtt.KEY"
+    q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(
+        cdn_config.get_proxy_urls("cdn", None, "alice", flavor="happ")[0]).query))
+    assert q["encryption"] == "mlkem768x25519plus.random.0rtt.KEY"
+    assert q["mode"] == "packet-up"
+    assert q["host"] == "game.example.net"
+    assert json.loads(q["extra"]) == {"uplinkHTTPMethod": "GET", "uplinkDataPlacement": "header"}
+
+
+def test_cdn_entry_without_encryption_is_left_out(xray_settings, cdn_config, monkeypatch):
+    monkeypatch.setattr(settings, "xhttp_vless_encryption", "")
+    assert cdn_config.generate_proxy_configs("cdn", None, "alice") == []
+
+
+def test_direct_entries_stay_unencrypted(xray_settings, proxy_config, monkeypatch):
+    monkeypatch.setattr(settings, "xhttp_vless_encryption", "mlkem768x25519plus.random.0rtt.KEY")
+    ie = proxy_config.generate_proxy_configs("regions", None, "alice")[0]
+    assert "encryption" not in ie
+    url = proxy_config.get_proxy_urls("regions", None, "alice")[0]
+    assert dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))["encryption"] == "none"
+
+
+def test_entries_sharing_a_cdn_origin_are_encrypted_too(xray_settings, tmp_path, monkeypatch):
+    # The origin's XHTTP inbound decrypts for every client, so a plain entry on that host
+    # must carry the encryption string as well.
+    config = {
+        "users": ["alice"],
+        "subs": {
+            "s": {
+                "CDN": {"protocol": "xhttp", "host": "game.example.net",
+                        "origin": "entry.example.net", "exit": "exit-se.example.net"},
+                "Direct": {"protocol": "xhttp", "host": "entry.example.net",
+                           "exit": "exit-ie.example.net"},
+                "Other": {"protocol": "xhttp", "host": "other.example.net"},
+            },
+        },
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(config))
+    monkeypatch.setattr(settings, "xhttp_vless_encryption", "ENC")
+    got = {p["name"]: p for p in ProxyConfig(str(path)).generate_proxy_configs("s", None, "alice")}
+    assert got["CDN"]["encryption"] == "ENC"
+    assert got["CDN"]["uuid"] == vless_id(f"alice.exit-se.example.net.{SALT}")
+    assert got["Direct"]["encryption"] == "ENC"
+    assert "encryption" not in got["Other"]

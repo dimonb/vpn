@@ -525,6 +525,37 @@ exit, a plain per-user id is refused (`invalid request user id`), RU names go di
 rendered file with `xray run -test`. Then feed cfgapp's YAML to mihomo
 (`mihomo -t`, then select each region via the API and fetch through it).
 
+### XHTTP through a CDN
+
+An `xhttp` entry may put a CDN in front of its entry host:
+
+```json
+"cdn": {
+  "<entry name>": {"protocol": "xhttp", "host": "<cdn name>", "origin": "<entry host>",
+                   "exit": "<exit host>", "mode": "packet-up"}
+}
+```
+
+- `host` is the CDN name clients connect to (SNI, Host); `origin` is the VPN host the CDN pulls
+  from — the templates serve the entry there (`(origin or host) == ansible_host`). With `exit`
+  the origin relays to that exit as above. Without it a relay origin hands the traffic to its own
+  sing-box (Xray's `relay` socks outbound → sing-box `xray-in`, `<tunnel gateway>:1081`, xray
+  joins the `tunnel` network), so CDN users get the relay's normal routing (domestic direct,
+  the rest via the forward group); a leaf origin sends it out directly.
+- **VLESS Encryption.** The CDN terminates TLS and would otherwise read the VLESS headers
+  (destinations). On an origin `xhttp-in` gets `decryption = XHTTP_VLESS_DECRYPTION` (from
+  `xray vlessenc`), and cfgapp adds `encryption = XHTTP_VLESS_ENCRYPTION` to *every* xhttp entry
+  served there — the inbound decrypts for all its clients, so a plain entry on the same host needs
+  it too. Without the string such entries are left out of subscriptions, never sent bare.
+- **CDNs without POST** (some CDNs proxy only GET/HEAD): the origin's `xhttp-in` is
+  `packet-up` with `uplinkHTTPMethod: GET`, `uplinkDataPlacement: header`; cfgapp puts the same in
+  the share link's `extra`. Uploads are slow (3 KB per request); downloads stream. mihomo has no
+  such options — use Xray-core clients (Happ, v2rayN) for CDN entries.
+- **The CDN name's own site.** caddy on the origin serves `vpn/game/astray` (a public-domain WebGL
+  game) for `Host: <cdn name>` and everything outside the secret path, and answers the CDN's
+  handshake for that name with its own certificate (`fallback_sni`) — enough for a CDN that does
+  not verify the origin's name. Disable the CDN's cache; XHTTP responses are `no-store` anyway.
+
 ## Adding a host on Oracle Cloud
 
 Driven with the `oci` CLI (API signing key; a repo-local venv keeps it off the system PATH).

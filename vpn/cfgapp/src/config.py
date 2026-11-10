@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     # XHTTP (vpn/xray.json.j2); empty = not offered.
     xhttp_path: str = Field(default="")
     xhttp_mode: str = Field(default="")  # mihomo xhttp-opts.mode; empty = client default
+    # VLESS Encryption string for xhttp entries served through a CDN (`origin` set); empty = none
+    xhttp_vless_encryption: str = Field(default="")
     # mihomo subscription headers (CLASH templates); empty = header not sent.
     profile_update_interval: str = Field(default="")  # hours
     profile_title: str = Field(default="")

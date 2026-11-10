@@ -9,15 +9,20 @@
     routes it over VLESS + REALITY (the exits' existing inbound, account `system`) to that exit.
     Russian ISPs only ever see this host; the exits' addresses never meet the Russian DPI. #}
 {% set relay_exits = [] %}
-{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host and _it.get('exit') and _it.exit not in relay_exits %}{% set _ = relay_exits.append(_it.exit) %}{% endif %}{% endfor %}{% endfor %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and (_it.get('origin') or _it.host) == ansible_host and _it.get('exit') and _it.exit not in relay_exits %}{% set _ = relay_exits.append(_it.exit) %}{% endif %}{% endfor %}{% endfor %}
 {#- Users enter only where the subscription points: xhttp-in (and caddy's route) exist on a host
-    that is the `host` of some xhttp entry. Exits reached through a relay need neither. #}
-{% set ns_x = namespace(here=false, direct=false) %}
-{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and _it.host == ansible_host %}{% set ns_x.here = true %}{% if not _it.get('exit') %}{% set ns_x.direct = true %}{% endif %}{% endif %}{% endfor %}{% endfor %}
+    that serves some xhttp entry — its `origin` if set (the `host` is then a CDN name in front of
+    it), else its `host`. Exits reached through a relay need neither. #}
+{% set ns_x = namespace(here=false, direct=false, cdn=false) %}
+{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and (_it.get('origin') or _it.host) == ansible_host %}{% set ns_x.here = true %}{% if not _it.get('exit') %}{% set ns_x.direct = true %}{% endif %}{% if _it.host != ansible_host %}{% set ns_x.cdn = true %}{% endif %}{% endif %}{% endfor %}{% endfor %}
 {% set xhttp_here = xhttp_path and ns_x.here %}
 {#- An entry without `exit` makes this host the exit for that user's own id (sha256("<user>.<SALT>")). #}
 {% set xhttp_direct = xhttp_here and ns_x.direct %}
 {% set relay_exits = relay_exits if xhttp_here else [] %}
+{#- On a relay (config.proxy[<this host>] has a forward group) exit-less XHTTP clients go to the
+    relay's own routing (sing-box `xray-in`) instead of leaving from this host directly. #}
+{% set _pf = (((config.get('proxy') or {}).get(ansible_host) or {}).get('features') or {}).get('forward-nonru') %}
+{% set via_relay = xhttp_direct and _pf and (config.get('subs') or {}).get(_pf) %}
 {% set routing = (config.get('routing') if config.get('routing') is mapping else {}) %}
 {% macro vless_id(seed) %}{{ seed | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}{% endmacro %}
 {
@@ -72,11 +77,11 @@
         "outboundTag": "to-{{ exit }}"
       },
       {% endfor %}{% if xhttp_direct %}
-      {# Users of an exit-less entry on this host leave from here. #}
+      {# Users of an exit-less entry on this host: the relay's routing on a relay, else here. #}
       {
         "inboundTag": ["xhttp-in"],
         "user": [{% for user in config.users %}"{{ user }}"{% if not loop.last %}, {% endif %}{% endfor %}],
-        "outboundTag": "direct"
+        "outboundTag": "{{ 'relay' if via_relay else 'direct' }}"
       },
       {% endif %}
       {# Fail closed: a relay user that matched no exit never leaves from this host. #}
@@ -175,14 +180,26 @@
           { "email": "{{ email }}", "id": "{{ vless_id(seed) }}" }{% if not loop.last %},{% endif %}
           {% endfor %}
         ],
-        "decryption": "none"
+        {#- VLESS Encryption (`xray vlessenc`) on a CDN origin: the CDN terminates TLS, so without it
+            the CDN would read the VLESS headers (destinations). Every client of this inbound then
+            needs the matching encryption string, so it is only set where a CDN entry is served. #}
+        "decryption": "{{ (xhttp_vless_decryption | default('')) if (ns_x.cdn and (xhttp_vless_decryption | default(''))) else 'none' }}"
       },
       "streamSettings": {
         "network": "xhttp",
         "security": "none",
         "xhttpSettings": {
           "path": "/{{ xhttp_path }}",
+{% if ns_x.cdn %}
+          {#- Behind a CDN that only proxies GET/HEAD (no POST): packet-up
+              with the upload chunks in request headers of GET requests. Clients of this inbound
+              must use the same (cfgapp sends them in the link's `extra`). #}
+          "mode": "packet-up",
+          "uplinkHTTPMethod": "GET",
+          "uplinkDataPlacement": "header"
+{% else %}
           "mode": "auto"
+{% endif %}
         }
       },
       "sniffing": {
@@ -205,7 +222,20 @@
       "protocol": "blackhole",
       "settings": {},
       "tag": "blocked"
-    }{% if relay_exits %}{% for exit in relay_exits %},
+    }{% if via_relay %},
+    {
+      "tag": "relay",
+      "protocol": "socks",
+      "settings": {
+        "servers": [
+          {
+            "address": "{{ tunnel_proxy_gateway | default('172.29.77.1') }}",
+            "port": {{ xray_relay_port | default(1081) }},
+            "users": [{ "user": "xray", "pass": "{{ ('xray-relay.' + salt) | hash('sha256') }}" }]
+          }
+        ]
+      }
+    }{% endif %}{% if relay_exits %}{% for exit in relay_exits %},
     {
       "tag": "to-{{ exit }}",
       "protocol": "vless",

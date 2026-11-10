@@ -73,6 +73,14 @@
         mode: "0755"
         recurse: true
 
+    # The site a CDN entry's name serves on its origin (caddy, by Host); small and static.
+    - name: copy the CDN front site to the server
+      ansible.builtin.synchronize:
+        src: ./vpn/game/
+        dest: "{{ config_directory }}/game/"
+        rsync_opts:
+          - "--exclude=.*"
+
     - name: Deploy configuration files using templates
       ansible.builtin.template:
         src: "{{ item.src }}"
