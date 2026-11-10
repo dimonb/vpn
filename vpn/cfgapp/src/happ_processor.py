@@ -1,10 +1,13 @@
 """HAPP template processor: substitutes PROXY_LIST with proxy URLs."""
 
+import base64
+import json
 import logging
 import urllib.parse
 
 from .processor import TemplateProcessor
 from .proxy_config import ProxyConfig
+from .xray_json import build_subscription
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +23,9 @@ class HappProcessor:
         self.template_processor = template_processor
         self.proxy_config = proxy_config
 
+    @staticmethod
     def _extract_query_params(
-        self, request_headers: dict
+        request_headers: dict,
     ) -> tuple[str | None, str | None, str | None]:
         sub_name = password = user = None
         query_string = request_headers.get("x-query-string")
@@ -80,3 +84,47 @@ class HappProcessor:
                         del lines[i]
             break
         return "\n".join(lines)
+
+
+def split_happ_json_template(tpl_text: str) -> tuple[dict[str, str], str]:
+    """Split a `#HAPP,JSON` template into Happ directives and the JSON skeleton.
+
+    Leading `#key: value` lines become response headers (a JSON body has no room for
+    them); the tag line and other bare `#` lines are dropped. The rest is the skeleton.
+    """
+    headers: dict[str, str] = {}
+    lines = tpl_text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line and not line.startswith("#"):
+            break
+        if line.startswith("#") and ":" in line:
+            key, value = line[1:].split(":", 1)
+            key = key.strip()
+            if key and " " not in key:
+                value = value.strip()
+                if not value.isascii():
+                    # header values are latin-1; Happ takes UTF-8 text as `base64:<…>`
+                    value = "base64:" + base64.b64encode(value.encode()).decode()
+                headers[key] = value
+        i += 1
+    return headers, "\n".join(lines[i:])
+
+
+def process_happ_json(
+    tpl_text: str, proxy_config: ProxyConfig | None, request_headers: dict
+) -> tuple[str, dict[str, str]]:
+    """Body and headers for a Happ JSON subscription (see xray_json)."""
+    headers, skeleton_text = split_happ_json_template(tpl_text)
+    skeleton = json.loads(skeleton_text)
+    auto_remarks = skeleton.pop("remarks", "Auto")
+    configs: list = []
+    if proxy_config:
+        sub_name, password, user = HappProcessor._extract_query_params(request_headers)
+        proxy_configs = proxy_config.generate_proxy_configs(sub_name, password, user)
+        configs = build_subscription(skeleton, proxy_configs, auto_remarks)
+    else:
+        logger.warning("No proxy config available, Happ JSON subscription is empty")
+    logger.info(f"HAPP JSON: {len(configs)} config(s)")
+    return json.dumps(configs, ensure_ascii=False, indent=1), headers

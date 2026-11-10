@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .auth import extract_template_tags, require_auth
 from .clash_processor import ClashProcessor
 from .config import settings
-from .happ_processor import HappProcessor
+from .happ_processor import HappProcessor, process_happ_json
 from .listcache import ListCache
 from .processor import LIST_TIMEOUT, ListFetchError, TemplateProcessor
 from .proxy_config import ProxyConfig
@@ -413,6 +413,15 @@ async def proxy_handler(request: Request, path: str):
         # Check authentication if AUTH tag is present
         if "AUTH" in tags:
             require_auth(request, proxy_config)
+
+        if "HAPP" in tags and "JSON" in tags:
+            # Full Xray configs: no RULE-SET expansion, directives travel as headers
+            request_headers = dict(request.headers)
+            if url.query:
+                request_headers["x-query-string"] = url.query
+            body, happ_headers = process_happ_json(tpl_text, proxy_config, request_headers)
+            happ_headers["content-type"] = "application/json; charset=utf-8"
+            return Response(content=body, status_code=200, headers=happ_headers)
 
         # Create HTTP client for template processor (list fetches are big and
         # tunneled — httpx's 5 s default is far too tight, see LIST_TIMEOUT)

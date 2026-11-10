@@ -556,6 +556,31 @@ An `xhttp` entry may put a CDN in front of its entry host:
   handshake for that name with its own certificate (`fallback_sni`) — enough for a CDN that does
   not verify the origin's name. Disable the CDN's cache; XHTTP responses are `no-store` anyway.
 
+## Happ JSON subscriptions (ordered failover)
+
+A template whose first line is `#HAPP,JSON[,AUTH]` makes cfgapp answer with a JSON array of full
+Xray client configs (`src/xray_json.py`), which Happ hands to its core unchanged — the only way to
+get automatic failover in Happ (share-link subscriptions never switch servers by themselves).
+
+- `#key: value` lines after the tag are Happ directives, sent as response headers (non-ASCII
+  values as `base64:…`); the rest is the config skeleton.
+- The `sub=` group's servers replace `"PROXY_OUTBOUNDS"`; rules with `balancerTag`/`outboundTag`
+  `"PROXY"` route to them. First config = all servers in **group order**: a chain of one-member
+  `leastPing` balancers, each falling back (`fallbackTag` → `loopback` outbound) to the next, the
+  last server unconditional; `burstObservatory` probes all but the last. Then one config per server.
+- Group order is the priority — keep the group a JSON object in the intended order. Only VLESS
+  entries (REALITY, XHTTP) have Xray outbounds; others are skipped with a warning.
+- Geo rules (`geoip:`/`geosite:`) in a JSON config match **nothing** unless the subscription also
+  sends a Happ routing profile (`#routing: happ://routing/onadd/<base64 profile JSON>`): Happ then
+  downloads the profile's `Geoipurl`/`Geositeurl` and applies its `DirectIp`/`DirectSites` on top
+  of the skeleton's rules (the failover chain survives). A geo file without a referenced tag stops
+  the core (`section RU is missing`) — check the file has every tag the profile names. Keep plain
+  domain/CIDR rules in the skeleton as a fallback for when the geo files cannot be fetched.
+- Test a config before shipping: run it in `xray run -c` with the socks inbound published (TCP
+  *and* UDP), break the first server (port 9) and check the log for `fallback to [...]`; probe UDP
+  with a SOCKS5 UDP ASSOCIATE (DNS / STUN) from inside the container's network namespace —
+  Docker Desktop's port mapping does not carry the relayed UDP back.
+
 ## Adding a host on Oracle Cloud
 
 Driven with the `oci` CLI (API signing key; a repo-local venv keeps it off the system PATH).
