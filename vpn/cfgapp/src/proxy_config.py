@@ -225,7 +225,9 @@ class ProxyConfig:
         if mode or settings.xhttp_mode:
             xhttp_opts["mode"] = mode or settings.xhttp_mode
         if cdn and not settings.xhttp_vless_encryption:
-            logger.warning(f"xhttp entry {proxy_name}: CDN entry needs XHTTP_VLESS_ENCRYPTION")
+            logger.warning(
+                f"xhttp entry {proxy_name}: CDN entry needs XHTTP_VLESS_ENCRYPTION"
+            )
             return {}
         extra: dict[str, Any] = {}
         if cdn:
@@ -234,7 +236,10 @@ class ProxyConfig:
             xhttp_opts["mode"] = "packet-up"
             extra = {
                 "encryption": settings.xhttp_vless_encryption,
-                "xhttp-extra": {"uplinkHTTPMethod": "GET", "uplinkDataPlacement": "header"},
+                "xhttp-extra": {
+                    "uplinkHTTPMethod": "GET",
+                    "uplinkDataPlacement": "header",
+                },
             }
         return {
             "name": proxy_name,

@@ -198,7 +198,9 @@ def clash_subscription_headers() -> dict[str, str]:
         if title.isascii():
             headers["profile-title"] = title
         else:
-            headers["profile-title"] = "base64:" + base64.b64encode(title.encode()).decode()
+            headers["profile-title"] = (
+                "base64:" + base64.b64encode(title.encode()).decode()
+            )
         headers["content-disposition"] = (
             "attachment; filename*=UTF-8''" + urllib.parse.quote(title + ".yaml")
         )
@@ -419,7 +421,9 @@ async def proxy_handler(request: Request, path: str):
             request_headers = dict(request.headers)
             if url.query:
                 request_headers["x-query-string"] = url.query
-            body, happ_headers = process_happ_json(tpl_text, proxy_config, request_headers)
+            body, happ_headers = process_happ_json(
+                tpl_text, proxy_config, request_headers
+            )
             happ_headers["content-type"] = "application/json; charset=utf-8"
             return Response(content=body, status_code=200, headers=happ_headers)
 

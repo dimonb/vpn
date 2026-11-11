@@ -54,7 +54,11 @@ XHTTP_CDN = {
 def test_reality_outbound():
     ob = to_xray_outbound(REALITY, "proxy-1")
     user = ob["settings"]["vnext"][0]["users"][0]
-    assert user == {"id": REALITY["uuid"], "encryption": "none", "flow": "xtls-rprx-vision"}
+    assert user == {
+        "id": REALITY["uuid"],
+        "encryption": "none",
+        "flow": "xtls-rprx-vision",
+    }
     ss = ob["streamSettings"]
     assert ss["network"] == "raw" and ss["security"] == "reality"
     assert ss["realitySettings"] == {
@@ -66,8 +70,20 @@ def test_reality_outbound():
 
 
 def test_reality_v2_carries_mldsa65_verify():
-    cfg = dict(REALITY, **{"reality-opts": {"public-key": "P", "short-id": "3e3e", "mldsa65-verify": "V"}})
-    assert to_xray_outbound(cfg, "t")["streamSettings"]["realitySettings"]["mldsa65Verify"] == "V"
+    cfg = dict(
+        REALITY,
+        **{
+            "reality-opts": {
+                "public-key": "P",
+                "short-id": "3e3e",
+                "mldsa65-verify": "V",
+            }
+        },
+    )
+    assert (
+        to_xray_outbound(cfg, "t")["streamSettings"]["realitySettings"]["mldsa65Verify"]
+        == "V"
+    )
 
 
 def test_xhttp_cdn_outbound():
@@ -109,8 +125,18 @@ def test_failover_chain_in_group_order():
         "settings": {"inboundTag": "failover-1-in"},
     }
     assert auto["routing"]["balancers"] == [
-        {"tag": "failover-0", "selector": ["proxy-1"], "strategy": {"type": "leastPing"}, "fallbackTag": "to-failover-1"},
-        {"tag": "failover-1", "selector": ["proxy-2"], "strategy": {"type": "leastPing"}, "fallbackTag": "proxy-3"},
+        {
+            "tag": "failover-0",
+            "selector": ["proxy-1"],
+            "strategy": {"type": "leastPing"},
+            "fallbackTag": "to-failover-1",
+        },
+        {
+            "tag": "failover-1",
+            "selector": ["proxy-2"],
+            "strategy": {"type": "leastPing"},
+            "fallbackTag": "proxy-3",
+        },
     ]
     # loopback traffic re-enters routing first; the template's own rules keep their order
     assert _rules(auto) == [
@@ -127,9 +153,18 @@ def test_failover_chain_in_group_order():
 
 def test_two_servers_need_no_loopback():
     auto = build_subscription(SKELETON, [REALITY, XHTTP_CDN], "Auto")[0]
-    assert [o["protocol"] for o in auto["outbounds"]][:3] == ["vless", "vless", "freedom"]
+    assert [o["protocol"] for o in auto["outbounds"]][:3] == [
+        "vless",
+        "vless",
+        "freedom",
+    ]
     assert auto["routing"]["balancers"] == [
-        {"tag": "failover-0", "selector": ["proxy-1"], "strategy": {"type": "leastPing"}, "fallbackTag": "proxy-2"}
+        {
+            "tag": "failover-0",
+            "selector": ["proxy-1"],
+            "strategy": {"type": "leastPing"},
+            "fallbackTag": "proxy-2",
+        }
     ]
 
 
@@ -154,16 +189,20 @@ def test_skeleton_is_not_mutated():
 
 
 def test_unsupported_entries_are_skipped():
-    subs = build_subscription(SKELETON, [{"type": "hysteria2", "name": "h"}, REALITY], "Auto")
+    subs = build_subscription(
+        SKELETON, [{"type": "hysteria2", "name": "h"}, REALITY], "Auto"
+    )
     assert [c["remarks"] for c in subs] == ["relay"]
 
 
 def test_template_directives_become_headers():
-    tpl = "#HAPP,JSON,AUTH\n#profile-title: my.profile\n#profile-update-interval: 6\n#announce: Привет\n{\"a\": 1}\n"
+    tpl = '#HAPP,JSON,AUTH\n#profile-title: my.profile\n#profile-update-interval: 6\n#announce: Привет\n{"a": 1}\n'
     headers, body = split_happ_json_template(tpl)
     assert headers["profile-title"] == "my.profile"
     assert headers["profile-update-interval"] == "6"
-    assert headers["announce"] == "base64:" + base64.b64encode("Привет".encode()).decode()
+    assert (
+        headers["announce"] == "base64:" + base64.b64encode("Привет".encode()).decode()
+    )
     assert "HAPP,JSON,AUTH" not in headers
     assert json.loads(body) == {"a": 1}
 
@@ -185,8 +224,9 @@ def test_endpoint_serves_json_with_directive_headers():
     ]
     proxy_config = Mock()
     proxy_config.generate_proxy_configs.return_value = [REALITY, XHTTP_CDN]
-    with patch("src.main.forward_request", side_effect=responses), patch.object(
-        main, "proxy_config", proxy_config
+    with (
+        patch("src.main.forward_request", side_effect=responses),
+        patch.object(main, "proxy_config", proxy_config),
     ):
         response = TestClient(main.app).get("/auto.conf?sub=auto&u=someone")
 

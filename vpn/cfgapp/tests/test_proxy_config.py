@@ -200,7 +200,9 @@ class TestProxyConfig:
         mock_settings.xray_publickey = "test-xray-public-key"
         mock_settings.xray_verify = "test-verify"
         proxy_config = ProxyConfig(str(config_file))
-        config = proxy_config._generate_vless_v2_config("ru-2.example.net", "RU_2", "testuser")
+        config = proxy_config._generate_vless_v2_config(
+            "ru-2.example.net", "RU_2", "testuser"
+        )
         assert config["reality-opts"]["support-x25519mlkem768"] is True
         assert config["reality-opts"]["public-key"] == "test-xray-public-key"
         # The Shadowrocket share link pins the same fingerprint.

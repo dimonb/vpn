@@ -87,7 +87,9 @@ def to_xray_outbound(config: dict[str, Any], tag: str) -> dict[str, Any] | None:
     return outbound
 
 
-def _replace_placeholders(node: Any, outbounds: list[dict], route: dict[str, str]) -> Any:
+def _replace_placeholders(
+    node: Any, outbounds: list[dict], route: dict[str, str]
+) -> Any:
     """Copy of `node` with the outbounds placeholder spliced in and PROXY rules routed."""
     if isinstance(node, list):
         out: list[Any] = []
