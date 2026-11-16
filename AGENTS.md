@@ -459,6 +459,25 @@ throttled in Russia (YouTube) hung with ~6 KB per connection while sing-box clie
 (`accepted tcp:<dest> [inbound-8443 -> relay] email: <user>`) to `docker logs vpn-xray-1`; the
 compose file then caps that log at 3 × 20 MB. Off by default (`access: none`).
 
+**IPv6 egress on an exit.** Telegram dials hard-coded IPv6 DCs; an exit without IPv6 answers
+"network is unreachable" and the client retries over IPv4 after an extra round trip through the
+relay. Give the host IPv6 at the cloud (below), then set `ipv6=true` on its inventory line: the
+compose default network gets `enable_ipv6` (Docker picks a ULA subnet and NATs it out), so Xray's
+REALITY/XHTTP clients — bridged, unlike sing-box/hysteria on the host network — get it too. Set it
+only on hosts that really have IPv6 egress. A `vpn_default` network created by an old Compose has no
+config-hash label and is not recreated by `up`; the deploy drops such a network (and the bridged
+containers on it) itself. Check: `curl -6 https://api64.ipify.org` on the host, and from xray's
+netns `nsenter -t $(docker inspect vpn-xray-1 -f '{{.State.Pid}}') -n bash -c '</dev/tcp/<v6>/443'`.
+
+- OCI: `vcn add-ipv6-vcn-cidr --is-oracle-gua-allocation-enabled true` → `subnet
+  add-ipv6-subnet-cidr` (/64) → `route-table update` with `::/0` → internet gateway (the update
+  *replaces* every rule: resend the IPv4 default, `--force`) → NSG egress `::/0` (+ ICMPv6 in for
+  PMTU) → `network ipv6 create --vnic-id`.
+- AWS EC2: `associate-vpc-cidr-block --amazon-provided-ipv6-cidr-block` → `associate-subnet-cidr-block`
+  → `create-route --destination-ipv6-cidr-block ::/0 --gateway-id <igw>` → `assign-ipv6-addresses`.
+  Lightsail: instance `ipAddressType=dualstack`.
+- Ubuntu takes the address and default route from RA/DHCPv6 by itself (can take ~30 s).
+
 ## XHTTP entry and the mihomo subscription
 
 Off unless `XHTTP_PATH` is set in the ENV_FILE; without it every template renders exactly as before.

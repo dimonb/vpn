@@ -234,6 +234,23 @@
         chdir: "{{ config_directory }}"
         cmd: docker compose build
 
+    # Compose recreates a network whose config changed only when the network carries its
+    # `com.docker.compose.config-hash` label; one created by an old Compose (2.29.x) has none and
+    # is silently kept, so `ipv6=true` would never reach it. Drop it (with the containers on it —
+    # the bridged ones only, host-network services keep running) and let `up` rebuild both.
+    - name: Recreate a pre-IPv6 compose network on an IPv6 host
+      ansible.builtin.shell:
+        chdir: "{{ config_directory }}"
+        cmd: |
+          net="$(basename "$PWD")_default"
+          [ "$(docker network inspect "$net" --format '{{ '{{' }}.EnableIPv6{{ '}}' }}' 2>/dev/null)" = false ] || exit 0
+          ids="$(docker network inspect "$net" --format '{{ '{{' }}range $id, $c := .Containers{{ '}}' }}{{ '{{' }}$id{{ '}}' }} {{ '{{' }}end{{ '}}' }}')"
+          [ -n "$ids" ] && docker rm -f $ids >/dev/null
+          docker network rm "$net" >/dev/null && echo recreated
+      register: vpn_ipv6_net
+      changed_when: "'recreated' in vpn_ipv6_net.stdout"
+      when: ipv6 | default(false) | bool
+
     # When the drop-in is in place `--pull always` goes through the tunnel, so a single
     # transient hiccup at the exit (e.g. `remote error: lookup auth.docker.io: unexpected
     # EOF`) is enough to abort the whole pull. Retry a couple of times instead of failing

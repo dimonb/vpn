@@ -175,14 +175,24 @@ volumes:
   cfgapp-cache:
     name: vpn-cfgapp-cache
 
-{% if relay %}
-# Dedicated bridge with a pinned subnet so sing-box (host networking) has a
-# stable address to expose its mixed inbounds on (cfgapp, and Xray where it serves XHTTP).
+{% set ipv6_on = (ipv6 | default(false) | bool) %}
+{% if relay or ipv6_on %}
 networks:
+{% if ipv6_on %}
+  # Inventory `ipv6=true` (the host itself has IPv6 egress): the bridged containers — Xray, whose
+  # REALITY/XHTTP clients leave from here — get it too. Docker picks a ULA subnet and NATs it out
+  # through the host's address (ip6tables is on by default since Docker 27).
+  default:
+    enable_ipv6: true
+{% endif %}
+{% if relay %}
+  # Dedicated bridge with a pinned subnet so sing-box (host networking) has a
+  # stable address to expose its mixed inbounds on (cfgapp, and Xray where it serves XHTTP).
   tunnel:
     name: vpn-tunnel
     ipam:
       config:
         - subnet: {{ tunnel_proxy_subnet | default('172.29.77.0/29') }}
+{% endif %}
 {% endif %}
 
