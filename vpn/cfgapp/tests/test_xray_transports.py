@@ -204,6 +204,39 @@ def test_cdn_entry_carries_vless_encryption_and_its_own_mode(
     }
 
 
+def test_cdn_uplink_data_key_reaches_every_client_of_the_origin(
+    xray_settings, tmp_path, monkeypatch
+):
+    # Some CDNs drop `X-Data-<n>` request headers; the CDN entry renames them, and every
+    # entry served on that origin (its inbound reads one key) must send the same name.
+    monkeypatch.setattr(
+        settings, "xhttp_vless_encryption", "mlkem768x25519plus.random.0rtt.KEY"
+    )
+    config = {
+        "users": ["alice"],
+        "subs": {
+            "cdn": {
+                "Game": {
+                    "protocol": "xhttp",
+                    "host": "game.example.org",
+                    "origin": "exit.example.org",
+                    "mode": "packet-up",
+                    "uplink_data_key": "X-Sync",
+                },
+                "Direct": {"protocol": "xhttp", "host": "exit.example.org"},
+            },
+        },
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(config))
+    pc = ProxyConfig(str(path))
+    for url in pc.get_proxy_urls("cdn", None, "alice", flavor="happ"):
+        extra = json.loads(
+            dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))["extra"]
+        )
+        assert extra["uplinkDataKey"] == "X-Sync"
+
+
 def test_cdn_entry_without_encryption_is_left_out(
     xray_settings, cdn_config, monkeypatch
 ):

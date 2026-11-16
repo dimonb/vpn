@@ -101,6 +101,24 @@ class ProxyConfig:
             and entry.get("origin") != entry.get("host")
         }
 
+    def _cdn_uplink_data_key(self, origin: str) -> str:
+        """`uplink_data_key` of a CDN entry served on ``origin`` ("" = Xray's default `X-Data`).
+
+        Some CDNs drop request headers named `X-Data-<n>`, which is where packet-up puts the
+        upload chunks; the origin's inbound reads the same key (vpn/xray.json.j2), so every
+        client of that inbound must use it.
+        """
+        for items in self.get_subs().values():
+            for entry in items.values():
+                if (
+                    entry.get("protocol") == "xhttp"
+                    and entry.get("origin") == origin
+                    and entry.get("origin") != entry.get("host")
+                    and entry.get("uplink_data_key")
+                ):
+                    return str(entry["uplink_data_key"])
+        return ""
+
     def generate_proxy_configs(
         self,
         sub_name: str | None = None,
@@ -136,6 +154,9 @@ class ProxyConfig:
                     entry.get("exit"),
                     entry.get("mode"),
                     cdn=(entry.get("origin") or host) in self._cdn_origins(),
+                    uplink_data_key=self._cdn_uplink_data_key(
+                        entry.get("origin") or host
+                    ),
                 )
             else:
                 # Generate one config per proxy (not per user)
@@ -198,6 +219,7 @@ class ProxyConfig:
         exit_host: str | None,
         mode: str | None = None,
         cdn: bool = False,
+        uplink_data_key: str = "",
     ) -> dict[str, Any]:
         """mihomo proxy: VLESS + XHTTP + TLS to <host>:443 (caddy, the host's own name).
 
@@ -239,6 +261,7 @@ class ProxyConfig:
                 "xhttp-extra": {
                     "uplinkHTTPMethod": "GET",
                     "uplinkDataPlacement": "header",
+                    **({"uplinkDataKey": uplink_data_key} if uplink_data_key else {}),
                 },
             }
         return {

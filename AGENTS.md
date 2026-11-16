@@ -583,6 +583,11 @@ An `xhttp` entry may put a CDN in front of its entry host:
   `packet-up` with `uplinkHTTPMethod: GET`, `uplinkDataPlacement: header`; cfgapp puts the same in
   the share link's `extra`. Uploads are slow (3 KB per request); downloads stream. mihomo has no
   such options — use Xray-core clients (Happ, v2rayN) for CDN entries.
+- **CDNs that drop `X-Data-<n>` headers** (where packet-up puts the upload chunks — the session
+  then dies at the VLESS Encryption handshake with `EOF`): set `"uplink_data_key": "<Header>"` on
+  the CDN entry; the origin's `xhttp-in` and every client of that origin get `uplinkDataKey`. A CDN
+  with a small request-header limit answers `431` to large chunks — not handled here yet (would
+  need `scMaxEachPostBytes` on both sides).
 - **The CDN name's own site.** caddy on the origin serves `vpn/game/astray` (a public-domain WebGL
   game) for `Host: <cdn name>` and everything outside the secret path, and answers the CDN's
   handshake for that name with its own certificate (`fallback_sni`) — enough for a CDN that does
