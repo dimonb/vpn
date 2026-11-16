@@ -12,6 +12,8 @@ outbound whose traffic re-enters routing at the next balancer. (``leastLoad`` wo
 RTT deviation, not by order, and a ``fallbackTag`` cannot name a balancer directly.)
 """
 
+import base64
+import binascii
 import copy
 import logging
 from typing import Any
@@ -25,6 +27,22 @@ ROUTE_PLACEHOLDER = "PROXY"  # "balancerTag"/"outboundTag" of a routing rule
 TAG_PREFIX = "proxy-"
 BALANCER_PREFIX = "failover-"
 LOOPBACK_PREFIX = "to-failover-"
+
+MLDSA65_PUBLIC_KEY_BYTES = 1952
+
+
+def valid_mldsa65_verify(value: str) -> bool:
+    """True when ``value`` is an ML-DSA-65 public key (base64url) Xray will accept.
+
+    Xray refuses the whole config over a malformed ``mldsa65Verify``, while a client without
+    one still connects (it just skips the post-quantum signature check) — so a bad value is
+    dropped rather than shipped.
+    """
+    try:
+        raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+    except (binascii.Error, ValueError):
+        return False
+    return len(raw) == MLDSA65_PUBLIC_KEY_BYTES
 
 
 def to_xray_outbound(config: dict[str, Any], tag: str) -> dict[str, Any] | None:
@@ -78,8 +96,14 @@ def to_xray_outbound(config: dict[str, Any], tag: str) -> dict[str, Any] | None:
             "publicKey": reality_opts.get("public-key", ""),
             "shortId": reality_opts.get("short-id", ""),
         }
-        if reality_opts.get("mldsa65-verify"):
-            reality["mldsa65Verify"] = reality_opts["mldsa65-verify"]
+        verify = reality_opts.get("mldsa65-verify")
+        if verify and valid_mldsa65_verify(verify):
+            reality["mldsa65Verify"] = verify
+        elif verify:
+            logger.warning(
+                f"{config.get('name', tag)}: mldsa65-verify is not a {MLDSA65_PUBLIC_KEY_BYTES}-byte"
+                " ML-DSA-65 key, left out of the Xray config"
+            )
         if reality_opts.get("spider-x"):
             reality["spiderX"] = reality_opts["spider-x"]
         stream = {"network": "raw", "security": "reality", "realitySettings": reality}

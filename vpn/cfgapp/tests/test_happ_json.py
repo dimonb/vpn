@@ -69,21 +69,23 @@ def test_reality_outbound():
     }
 
 
+def _with_verify(value: str) -> dict:
+    opts = {"public-key": "P", "short-id": "3e3e", "mldsa65-verify": value}
+    return dict(REALITY, **{"reality-opts": opts})
+
+
 def test_reality_v2_carries_mldsa65_verify():
-    cfg = dict(
-        REALITY,
-        **{
-            "reality-opts": {
-                "public-key": "P",
-                "short-id": "3e3e",
-                "mldsa65-verify": "V",
-            }
-        },
-    )
-    assert (
-        to_xray_outbound(cfg, "t")["streamSettings"]["realitySettings"]["mldsa65Verify"]
-        == "V"
-    )
+    key = base64.urlsafe_b64encode(bytes(1952)).decode().rstrip("=")
+    reality = to_xray_outbound(_with_verify(key), "t")["streamSettings"]
+    assert reality["realitySettings"]["mldsa65Verify"] == key
+
+
+def test_malformed_mldsa65_verify_is_left_out():
+    """Xray refuses the whole config over a bad verify key; without one it still connects."""
+    short = base64.urlsafe_b64encode(bytes(1870)).decode().rstrip("=")
+    for value in (short, "not base64!"):
+        reality = to_xray_outbound(_with_verify(value), "t")["streamSettings"]
+        assert "mldsa65Verify" not in reality["realitySettings"]
 
 
 def test_xhttp_cdn_outbound():
