@@ -19,15 +19,19 @@
 {#- An entry without `exit` makes this host the exit for that user's own id (sha256("<user>.<SALT>")). #}
 {% set xhttp_direct = xhttp_here and ns_x.direct %}
 {% set relay_exits = relay_exits if xhttp_here else [] %}
-{#- On a relay (config.proxy[<this host>] has a forward group) exit-less XHTTP clients go to the
-    relay's own routing (sing-box `xray-in`) instead of leaving from this host directly. #}
+{#- On a relay (config.proxy[<this host>] has a forward group) REALITY clients and exit-less XHTTP
+    clients go to the relay's own routing (sing-box `xray-in`: domestic direct, the rest via the
+    forward group) instead of leaving from this host directly — a relay's own uplink is the
+    censored/throttled one. #}
 {% set _pf = (((config.get('proxy') or {}).get(ansible_host) or {}).get('features') or {}).get('forward-nonru') %}
-{% set via_relay = xhttp_direct and _pf and (config.get('subs') or {}).get(_pf) %}
+{% set via_relay = _pf and (config.get('subs') or {}).get(_pf) %}
 {% set routing = (config.get('routing') if config.get('routing') is mapping else {}) %}
 {% macro vless_id(seed) %}{{ seed | hash('sha256') | string | truncate(32, true, '') | regex_replace('^(.{8})(.{4})(.{4})(.{4})(.{12})$', '\\1-\\2-\\3-\\4-\\5') }}{% endmacro %}
 {
   "log": {
-    "access": "none",
+    {# XRAY_ACCESS_LOG=on: one line per connection (user, destination, outbound) to stdout,
+       i.e. `docker logs vpn-xray-1`; the compose file caps the log size then. #}
+    "access": "{{ '' if (xray_access_log | default('') | string | lower) in ['1', 'on', 'true', 'yes'] else 'none' }}",
     "dnsLog": false,
     "error": "",
     "loglevel": "info",
@@ -36,6 +40,16 @@
   "routing": {
     "domainStrategy": "IPIfNonMatch",
     "rules": [
+      {% if via_relay %}
+      {# First, so Xray never resolves these destinations itself (a relay's resolver may be
+         poisoned); sing-box rejects private addresses on its side. `system` is the relay → exit
+         account: another relay using this host as its exit leaves from here, as before. #}
+      {
+        "inboundTag": ["inbound-8443"],
+        "user": [{% for user in config.users if user != 'system' %}"{{ user }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+        "outboundTag": "relay"
+      },
+      {% endif %}
       {
         "ip": [
           "geoip:private"

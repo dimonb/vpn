@@ -34,12 +34,20 @@ services:
       # per-user traffic counters for json-exporter (/debug/vars)
       - "127.0.0.1:11111:11111"
 {% endif %}
-{% if xhttp_here and relay %}
-    # On a relay Xray hands XHTTP clients without an `exit` to sing-box's `xray-in`, which
-    # listens on the tunnel bridge's gateway.
+{% if relay %}
+    # On a relay Xray hands its REALITY clients and XHTTP clients without an `exit` to
+    # sing-box's `xray-in`, which listens on the tunnel bridge's gateway.
     networks:
       - default
       - tunnel
+{% endif %}
+{% if (xray_access_log | default('') | string | lower) in ['1', 'on', 'true', 'yes'] %}
+    # XRAY_ACCESS_LOG=on writes a line per connection; keep it from filling small disks.
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 {% endif %}
   sing-box:
     # Upstream sing-box plus vpn/sing-box/*.patch (`make sing-box-image`): its REALITY client

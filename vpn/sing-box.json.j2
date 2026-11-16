@@ -5,11 +5,10 @@
 {% set forward_group = (features.get('forward-nonru') if features is mapping else none) %}
 {% set forward_il_group = (features.get('forward-il') if features is mapping else none) %}
 {% set relay = ((forward_group and config.subs.get(forward_group)) or (forward_il_group and config.subs.get(forward_il_group))) %}
-{#- Xray hands its XHTTP clients without an `exit` (e.g. a CDN entry on this relay) to the relay's
-    own routing through `xray-in`, so they get the same RU-direct / auto-exit treatment as vless-in. #}
-{% set ns_xr = namespace(direct=false) %}
-{% for _g, _items in (config.get('subs') or {}).items() %}{% for _n, _it in _items.items() %}{% if _it.protocol == 'xhttp' and (_it.get('origin') or _it.host) == ansible_host and not _it.get('exit') %}{% set ns_xr.direct = true %}{% endif %}{% endfor %}{% endfor %}
-{% set xray_relay_in = (xhttp_path | default('') | string | length > 0) and ns_xr.direct and forward_group and config.subs.get(forward_group) %}
+{#- Xray hands its REALITY clients and its XHTTP clients without an `exit` (e.g. a CDN entry on this
+    relay) to the relay's own routing through `xray-in`, so they get the same RU-direct / auto-exit
+    treatment as vless-in. #}
+{% set xray_relay_in = forward_group and config.subs.get(forward_group) %}
 {% set routing = (config.get('routing') if config is mapping and config.get('routing') is mapping else {}) %}
 {
   "dns": {

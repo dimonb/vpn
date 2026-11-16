@@ -446,6 +446,19 @@ client ──443, SNI = the host's own name──▶ caddy l4 default ─▶ :44
              └─ otherwise: id = sha256("<user>.<SALT>") ─▶ direct (this host is the exit)
 ```
 
+**Xray clients on a relay take the relay's routing.** On a host with a forward group, Xray's
+REALITY users (all but `system`) and exit-less XHTTP users go out through the `relay` socks
+outbound into sing-box `xray-in` (`<tunnel gateway>:1081`; xray joins the `tunnel` network), so
+they get the same treatment as `vless-in`: RU destinations direct, the rest via `auto`. That rule
+comes first in Xray's routing, so Xray never resolves those names with the relay's (possibly
+poisoned) resolver. `system` keeps leaving directly — it is the account other relays use when this
+host is their exit. Before this, REALITY clients of a relay left from the RU address itself: sites
+throttled in Russia (YouTube) hung with ~6 KB per connection while sing-box clients were fine.
+
+**Xray access log.** `XRAY_ACCESS_LOG=on` in the ENV_FILE writes one line per connection
+(`accepted tcp:<dest> [inbound-8443 -> relay] email: <user>`) to `docker logs vpn-xray-1`; the
+compose file then caps that log at 3 × 20 MB. Off by default (`access: none`).
+
 ## XHTTP entry and the mihomo subscription
 
 Off unless `XHTTP_PATH` is set in the ENV_FILE; without it every template renders exactly as before.
