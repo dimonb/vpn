@@ -570,6 +570,12 @@ get automatic failover in Happ (share-link subscriptions never switch servers by
   last server unconditional; `burstObservatory` probes all but the last. Then one config per server.
 - Group order is the priority — keep the group a JSON object in the intended order. Only VLESS
   entries (REALITY, XHTTP) have Xray outbounds; others are skipped with a warning.
+- List-based routing: a rule may carry `"ruleSet": [<list url>, …]` (`src/xray_rules.py`). The
+  lists are fetched like RULE-SETs (cache, NETSET) and the rule becomes one `domain` rule and one
+  `ip` rule (Xray ANDs matchers inside a rule), other fields copied to both. `IP-ASN` and other
+  types with no Xray equivalent are dropped with a warning; a failed fetch fails the request.
+  Unmatched traffic goes to the **first outbound** (the proxies), so a list-routed skeleton needs
+  a final catch-all `direct` rule.
 - Geo rules (`geoip:`/`geosite:`) in a JSON config match **nothing** unless the subscription also
   sends a Happ routing profile (`#routing: happ://routing/onadd/<base64 profile JSON>`): Happ then
   downloads the profile's `Geoipurl`/`Geositeurl` and applies its `DirectIp`/`DirectSites` on top

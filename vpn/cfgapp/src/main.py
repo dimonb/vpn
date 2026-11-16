@@ -417,13 +417,19 @@ async def proxy_handler(request: Request, path: str):
             require_auth(request, proxy_config)
 
         if "HAPP" in tags and "JSON" in tags:
-            # Full Xray configs: no RULE-SET expansion, directives travel as headers
+            # Full Xray configs; directives travel as headers, "ruleSet" rules are
+            # expanded from the same lists the other templates use
             request_headers = dict(request.headers)
             if url.query:
                 request_headers["x-query-string"] = url.query
-            body, happ_headers = process_happ_json(
-                tpl_text, proxy_config, request_headers
-            )
+            async with httpx.AsyncClient(timeout=LIST_TIMEOUT) as http_client:
+                body, happ_headers = await process_happ_json(
+                    tpl_text,
+                    proxy_config,
+                    request_headers,
+                    TemplateProcessor(http_client),
+                    request.headers.get("host", ""),
+                )
             happ_headers["content-type"] = "application/json; charset=utf-8"
             return Response(content=body, status_code=200, headers=happ_headers)
 

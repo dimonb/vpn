@@ -8,6 +8,7 @@ import urllib.parse
 from .processor import TemplateProcessor
 from .proxy_config import ProxyConfig
 from .xray_json import build_subscription
+from .xray_rules import resolve_rule_sets, rule_set_urls
 
 logger = logging.getLogger(__name__)
 
@@ -112,12 +113,27 @@ def split_happ_json_template(tpl_text: str) -> tuple[dict[str, str], str]:
     return headers, "\n".join(lines[i:])
 
 
-def process_happ_json(
-    tpl_text: str, proxy_config: ProxyConfig | None, request_headers: dict
+async def process_happ_json(
+    tpl_text: str,
+    proxy_config: ProxyConfig | None,
+    request_headers: dict,
+    template_processor: TemplateProcessor | None = None,
+    incoming_host: str = "",
 ) -> tuple[str, dict[str, str]]:
-    """Body and headers for a Happ JSON subscription (see xray_json)."""
+    """Body and headers for a Happ JSON subscription (see xray_json, xray_rules)."""
     headers, skeleton_text = split_happ_json_template(tpl_text)
     skeleton = json.loads(skeleton_text)
+    if rule_set_urls(skeleton):
+        if template_processor is None:
+            raise ValueError("Happ JSON template has ruleSet rules but no list fetcher")
+
+        async def fetch_lines(url: str) -> list[str]:
+            task = {"url": url, "suffix": ""}
+            return await template_processor.expand_rule_set(
+                task, incoming_host, request_headers
+            )
+
+        skeleton = await resolve_rule_sets(skeleton, fetch_lines)
     auto_remarks = skeleton.pop("remarks", "Auto")
     configs: list = []
     if proxy_config:
